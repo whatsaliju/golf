@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hole Flyover — Mock Data Demo</title>
+<style>
+  @import url('https://cdnjs.cloudflare.com/ajax/libs/JetBrains-Mono/2.304/css/jetbrains-mono.min.css');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+  :root{
+    --sky-top:#0d2430;
+    --sky-horizon:#3d6b5c;
+    --sky-glow:#e8a355;
+    --fairway-a:#3a6b3f;
+    --fairway-b:#457645;
+    --rough:#25422a;
+    --green-turf:#6aab5f;
+    --bunker:#d8c69c;
+    --pin-red:#c0392b;
+    --ink:#eef2ee;
+    --ink-dim:#9fb3a6;
+    --panel:rgba(10,20,16,0.55);
+    --accent:#e8a355;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;
+    font-family:'Inter',system-ui,sans-serif;color:var(--ink);}
+  #canvas-wrap{position:absolute;inset:0;}
+  canvas{display:block;}
+
+  /* HUD */
+  .hud{position:absolute;pointer-events:none;}
+  .hud-top{top:0;left:0;right:0;padding:22px 28px;display:flex;justify-content:space-between;
+    align-items:flex-start;background:linear-gradient(180deg,rgba(0,0,0,0.45),transparent);}
+  .hole-title{font-weight:700;font-size:20px;letter-spacing:0.02em;}
+  .hole-sub{font-size:12px;color:var(--ink-dim);margin-top:2px;letter-spacing:0.06em;text-transform:uppercase;}
+  .hud-badge{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);
+    border:1px solid rgba(232,163,85,0.4);padding:4px 10px;border-radius:2px;letter-spacing:0.08em;}
+
+  .telemetry{position:absolute;bottom:26px;left:28px;right:28px;display:flex;gap:1px;
+    background:rgba(232,163,85,0.15);border-radius:6px;overflow:hidden;
+    box-shadow:0 8px 30px rgba(0,0,0,0.4);}
+  .metric{flex:1;background:var(--panel);backdrop-filter:blur(6px);padding:14px 16px;}
+  .metric-label{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-dim);}
+  .metric-value{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:600;
+    margin-top:4px;color:var(--ink);}
+  .metric-value span{font-size:13px;color:var(--ink-dim);font-weight:400;margin-left:3px;}
+  .metric.warn .metric-value{color:var(--accent);}
+
+  .progress-rail{position:absolute;bottom:104px;left:28px;right:28px;height:3px;
+    background:rgba(255,255,255,0.12);border-radius:2px;pointer-events:none;}
+  .progress-fill{height:100%;width:0%;background:var(--accent);border-radius:2px;
+    transition:width 0.05s linear;}
+
+  .controls{position:absolute;top:22px;right:28px;display:flex;gap:8px;pointer-events:auto;}
+  .btn{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.06em;
+    background:var(--panel);color:var(--ink);border:1px solid rgba(255,255,255,0.18);
+    padding:8px 14px;border-radius:3px;cursor:pointer;backdrop-filter:blur(6px);
+    text-transform:uppercase;transition:background 0.15s,border-color 0.15s;}
+  .btn:hover{background:rgba(232,163,85,0.18);border-color:var(--accent);}
+
+  .note{position:absolute;top:74px;right:28px;max-width:230px;font-size:11px;
+    line-height:1.5;color:var(--ink-dim);text-align:right;pointer-events:none;}
+  .note b{color:var(--ink);}
+</style>
+</head>
+<body>
+
+<div id="canvas-wrap"></div>
+
+<div class="hud hud-top">
+  <div>
+    <div class="hole-title" id="holeTitle">Hole 7 — Par 4</div>
+    <div class="hole-sub" id="holeSub">Mock terrain · dogleg right</div>
+  </div>
+  <div class="hud-badge">MOCK DATA · NOT COURSE-ACCURATE</div>
+</div>
+
+<div class="controls">
+  <button class="btn" id="playBtn">Replay flyover</button>
+  <button class="btn" id="speedBtn">Speed: 1x</button>
+</div>
+
+<div class="note">Procedural terrain + scripted camera path.<br>Swap in real <b>elevation, hole geometry,<br>and imagery</b> to make this course-accurate.</div>
+
+<div class="progress-rail"><div class="progress-fill" id="progressFill"></div></div>
+
+<div class="telemetry">
+  <div class="metric">
+    <div class="metric-label">Distance to pin</div>
+    <div class="metric-value" id="distVal">412<span>yd</span></div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Elevation change</div>
+    <div class="metric-value" id="elevVal">+18<span>ft</span></div>
+  </div>
+  <div class="metric warn">
+    <div class="metric-label">Camera altitude</div>
+    <div class="metric-value" id="altVal">210<span>ft AGL</span></div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Flight progress</div>
+    <div class="metric-value" id="progVal">0<span>%</span></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ============================================================
+   MOCK HOLE CONFIG
+   Replace this block with real per-hole data once you're
+   pulling from OSM / a course-data API / your own GPS survey.
+   Units: yards for distance, feet for elevation, all else meters.
+   ============================================================ */
+const HOLE = {
+  name: "Hole 7 — Par 4",
+  yardage: 412,
+  elevationChangeFt: 18,       // + = green sits above tee
+  doglegRight: true,
+  // Centerline control points from tee (0) to green (1), as [x, z] in meters,
+  // in fairway-relative space. This is what you'd replace with real
+  // tee/green GPS coordinates projected to local meters.
+  centerline: [
+    [0, 0], [8, -60], [22, -140], [55, -230], [70, -320], [60, -380]
+  ]
+};
+
+/* ============================================================
+   SCENE SETUP
+   ============================================================ */
+const wrap = document.getElementById('canvas-wrap');
+const scene = new THREE.Scene();
+const skyTop = new THREE.Color(0x0d2430);
+const skyHorizon = new THREE.Color(0xe8a355);
+scene.fog = new THREE.FogExp2(0x2b3f3a, 0.0022);
+
+const camera = new THREE.PerspectiveCamera(55, window.innerWidth/window.innerHeight, 0.5, 4000);
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+wrap.appendChild(renderer.domElement);
+
+// sky gradient dome
+(function buildSky(){
+  const skyGeo = new THREE.SphereGeometry(3000, 24, 16);
+  const skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    uniforms:{
+      top:{value: skyTop}, bottom:{value: skyHorizon}
+    },
+    vertexShader:`varying vec3 vPos; void main(){ vPos = position; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+    fragmentShader:`
+      varying vec3 vPos; uniform vec3 top; uniform vec3 bottom;
+      void main(){
+        float h = normalize(vPos).y;
+        float t = smoothstep(-0.05, 0.5, h);
+        vec3 col = mix(bottom, top, t);
+        gl_FragColor = vec4(col,1.0);
+      }`
+  });
+  scene.add(new THREE.Mesh(skyGeo, skyMat));
+})();
+
+// lighting
+const hemi = new THREE.HemisphereLight(0xbfd8c8, 0x1a2a1e, 0.9);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffe0b0, 1.1);
+sun.position.set(-300, 220, 150);
+scene.add(sun);
+
+/* ============================================================
+   TERRAIN
+   Height function = gentle rolling base + rise toward the green,
+   matching HOLE.elevationChangeFt. Replace with a real DEM
+   heightmap sample (e.g. from a Terrain-RGB tile) when you
+   have real data.
+   ============================================================ */
+const elevChangeM = HOLE.elevationChangeFt * 0.3048;
+function terrainHeight(x, z){
+  const t = THREE.MathUtils.clamp(-z / 380, 0, 1); // 0 at tee, 1 at green
+  const rise = t * elevChangeM;
+  const roll = Math.sin(x*0.02)*1.2 + Math.sin(z*0.015+1.5)*1.0;
+  return rise + roll;
+}
+
+const TERRAIN_SIZE = 900;
+const SEG = 140;
+const terrainGeo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, SEG, SEG);
+terrainGeo.rotateX(-Math.PI/2);
+{
+  const pos = terrainGeo.attributes.position;
+  for(let i=0;i<pos.count;i++){
+    const x = pos.getX(i), z = pos.getZ(i);
+    pos.setY(i, terrainHeight(x,z));
+  }
+  terrainGeo.computeVertexNormals();
+}
+
+// fairway mow-stripe texture (signature element)
+function buildFairwayTexture(){
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  const stripeH = 16;
+  for(let y=0;y<c.height;y+=stripeH){
+    ctx.fillStyle = (y/stripeH)%2===0 ? '#3a6b3f' : '#457645';
+    ctx.fillRect(0,y,c.width,stripeH);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(6, 30);
+  return tex;
+}
+
+const terrainMat = new THREE.MeshStandardMaterial({
+  color: 0x2a4a2e, roughness: 1, metalness: 0
+});
+const terrain = new THREE.Mesh(terrainGeo, terrainMat);
+terrain.receiveShadow = true;
+scene.add(terrain);
+
+// fairway ribbon following the centerline (raised texture strip)
+function catmullRom(points, t){
+  const p = points;
+  const n = p.length - 1;
+  const seg = Math.min(Math.floor(t*n), n-1);
+  const localT = t*n - seg;
+  const p0 = p[Math.max(seg-1,0)], p1 = p[seg], p2 = p[Math.min(seg+1,n)], p3 = p[Math.min(seg+2,n)];
+  function cr(a,b,c,d,tt){
+    const t2=tt*tt, t3=t2*tt;
+    return 0.5*((2*b) + (-a+c)*tt + (2*a-5*b+4*c-d)*t2 + (-a+3*b-3*c+d)*t3);
+  }
+  return [cr(p0[0],p1[0],p2[0],p3[0],localT), cr(p0[1],p1[1],p2[1],p3[1],localT)];
+}
+
+const fairwayPts = [];
+const FW_SAMPLES = 200;
+for(let i=0;i<=FW_SAMPLES;i++){
+  const t = i/FW_SAMPLES;
+  const [x,z] = catmullRom(HOLE.centerline, t);
+  fairwayPts.push(new THREE.Vector2(x,z));
+}
+
+function buildFairwayMesh(pts, width){
+  const positions = [];
+  const uvs = [];
+  for(let i=0;i<pts.length;i++){
+    const p = pts[i];
+    const prev = pts[Math.max(i-1,0)];
+    const next = pts[Math.min(i+1,pts.length-1)];
+    const dir = new THREE.Vector2(next.x-prev.x, next.y-prev.y).normalize();
+    const nrm = new THREE.Vector2(-dir.y, dir.x);
+    const wl = width*(i<pts.length-15 ? 1 : THREE.MathUtils.lerp(1,2.6,(i-(pts.length-15))/15));
+    const left = new THREE.Vector2(p.x+nrm.x*wl/2, p.y+nrm.y*wl/2);
+    const right = new THREE.Vector2(p.x-nrm.x*wl/2, p.y-nrm.y*wl/2);
+    positions.push(left, right);
+    uvs.push(new THREE.Vector2(0,i/pts.length*20), new THREE.Vector2(1,i/pts.length*20));
+  }
+  const geo = new THREE.BufferGeometry();
+  const vertArr = [], uvArr = [], idxArr = [];
+  for(let i=0;i<positions.length;i++){
+    const v = positions[i];
+    const y = terrainHeight(v.x, v.y) + 0.06;
+    vertArr.push(v.x, y, v.y);
+    uvArr.push(uvs[i].x, uvs[i].y);
+  }
+  for(let i=0;i<pts.length-1;i++){
+    const a=i*2, b=i*2+1, c=i*2+2, d=i*2+3;
+    idxArr.push(a,c,b, b,c,d);
+  }
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(vertArr,3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvArr,2));
+  geo.setIndex(idxArr);
+  geo.computeVertexNormals();
+  return geo;
+}
+
+const fairwayGeo = buildFairwayMesh(fairwayPts, 34);
+const fairwayMat = new THREE.MeshStandardMaterial({ map: buildFairwayTexture(), roughness: 0.95 });
+const fairwayMesh = new THREE.Mesh(fairwayGeo, fairwayMat);
+scene.add(fairwayMesh);
+
+// green (putting surface) near end of centerline
+const greenCenter2D = fairwayPts[fairwayPts.length-1];
+const greenY = terrainHeight(greenCenter2D.x, greenCenter2D.y);
+const greenMesh = new THREE.Mesh(
+  new THREE.CircleGeometry(20, 40),
+  new THREE.MeshStandardMaterial({ color: 0x6aab5f, roughness: 0.9 })
+);
+greenMesh.rotation.x = -Math.PI/2;
+greenMesh.position.set(greenCenter2D.x, greenY+0.08, greenCenter2D.y);
+scene.add(greenMesh);
+
+// pin flag
+const pinGroup = new THREE.Group();
+const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,3,6), new THREE.MeshStandardMaterial({color:0xffffff}));
+pole.position.y = 1.5;
+const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.1,0.7), new THREE.MeshStandardMaterial({color:0xc0392b, side:THREE.DoubleSide}));
+flag.position.set(0.55, 2.7, 0);
+pinGroup.add(pole, flag);
+pinGroup.position.set(greenCenter2D.x-3, greenY, greenCenter2D.y+2);
+scene.add(pinGroup);
+
+// bunkers flanking the green
+function addBunker(dx, dz, r){
+  const m = new THREE.Mesh(new THREE.CircleGeometry(r, 24), new THREE.MeshStandardMaterial({color:0xd8c69c, roughness:1}));
+  m.rotation.x = -Math.PI/2;
+  const bx = greenCenter2D.x+dx, bz = greenCenter2D.y+dz;
+  m.position.set(bx, terrainHeight(bx,bz)+0.05, bz);
+  scene.add(m);
+}
+addBunker(-22, -6, 7);
+addBunker(16, 10, 5.5);
+
+// tee marker
+const teePos2D = fairwayPts[0];
+const teeMarker = new THREE.Mesh(new THREE.BoxGeometry(2,0.3,2), new THREE.MeshStandardMaterial({color:0xeef2ee}));
+teeMarker.position.set(teePos2D.x, terrainHeight(teePos2D.x,teePos2D.y)+0.2, teePos2D.y);
+scene.add(teeMarker);
+
+/* ============================================================
+   CAMERA FLIGHT PATH
+   Starts high behind the tee, follows the hole, descends and
+   settles in an orbit around the green.
+   ============================================================ */
+const flightPts = [];
+const FLIGHT_SAMPLES = 260;
+for(let i=0;i<=FLIGHT_SAMPLES;i++){
+  const t = i/FLIGHT_SAMPLES;
+  let camT = Math.min(t*1.15, 1);
+  const [cx, cz] = catmullRom(HOLE.centerline, camT);
+  const groundY = terrainHeight(cx,cz);
+  const altitude = THREE.MathUtils.lerp(85, 18, easeInOut(Math.min(t*1.05,1))); // meters AGL, descends
+  const lateralOffset = Math.sin(t*Math.PI*0.6) * 14;
+  const behindOffset = -14 * (1-t);
+  flightPts.push({
+    pos: new THREE.Vector3(cx+lateralOffset, groundY+altitude, cz+behindOffset),
+    lookAheadT: Math.min(camT+0.06, 1),
+    altitude
+  });
+}
+// final orbit segment around the green
+const ORBIT_SAMPLES = 90;
+for(let i=0;i<=ORBIT_SAMPLES;i++){
+  const a = (i/ORBIT_SAMPLES) * Math.PI * 1.4;
+  const r = 42;
+  const x = greenCenter2D.x + Math.cos(a)*r;
+  const z = greenCenter2D.y + Math.sin(a)*r*0.7;
+  flightPts.push({
+    pos: new THREE.Vector3(x, greenY+22, z),
+    lookAt: new THREE.Vector3(greenCenter2D.x, greenY+1, greenCenter2D.y),
+    altitude: 22
+  });
+}
+
+function easeInOut(t){ return t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2; }
+
+/* ============================================================
+   ANIMATE
+   ============================================================ */
+let flightIndex = 0;
+let playing = true;
+let speed = 1;
+const distVal = document.getElementById('distVal');
+const elevVal = document.getElementById('elevVal');
+const altVal = document.getElementById('altVal');
+const progVal = document.getElementById('progVal');
+const progressFill = document.getElementById('progressFill');
+
+document.getElementById('playBtn').onclick = () => { flightIndex = 0; playing = true; };
+document.getElementById('speedBtn').onclick = (e) => {
+  speed = speed === 1 ? 2 : speed === 2 ? 0.5 : 1;
+  e.target.textContent = 'Speed: ' + speed + 'x';
+};
+
+elevVal.innerHTML = (HOLE.elevationChangeFt>=0?'+':'') + HOLE.elevationChangeFt + '<span>ft</span>';
+
+function render(){
+  requestAnimationFrame(render);
+
+  if(playing){
+    flightIndex += speed;
+    if(flightIndex >= flightPts.length-1){ flightIndex = flightPts.length-1; playing = false; }
+  }
+
+  const idx = Math.floor(flightIndex);
+  const frame = flightPts[idx];
+  camera.position.copy(frame.pos);
+
+  if(frame.lookAt){
+    camera.lookAt(frame.lookAt);
+  } else {
+    const [lx, lz] = catmullRom(HOLE.centerline, frame.lookAheadT);
+    camera.lookAt(new THREE.Vector3(lx, terrainHeight(lx,lz)+2, lz));
+  }
+
+  const progress = idx / (flightPts.length-1);
+  const remainingYards = Math.round(HOLE.yardage * (1 - Math.min(progress*1.3,1)));
+  distVal.innerHTML = Math.max(remainingYards,0) + '<span>yd</span>';
+  altVal.innerHTML = Math.round(frame.altitude*3.281) + '<span>ft AGL</span>';
+  progVal.innerHTML = Math.round(progress*100) + '<span>%</span>';
+  progressFill.style.width = (progress*100) + '%';
+
+  renderer.render(scene, camera);
+}
+render();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>

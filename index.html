@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Hole Flyover — Real Data</title>
+<style>
+  @import url('https://cdnjs.cloudflare.com/ajax/libs/JetBrains-Mono/2.304/css/jetbrains-mono.min.css');
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+  :root{
+    --sky-top:#0d2430;
+    --sky-horizon:#3d6b5c;
+    --sky-glow:#e8a355;
+    --green-turf:#6aab5f;
+    --ink:#eef2ee;
+    --ink-dim:#9fb3a6;
+    --panel:rgba(10,20,16,0.55);
+    --accent:#e8a355;
+    --ok:#7fce7f;
+    --warn:#e8a355;
+    --err:#e07a6b;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;overflow:hidden;background:#000;
+    font-family:'Inter',system-ui,sans-serif;color:var(--ink);}
+  #canvas-wrap{position:absolute;inset:0;}
+  canvas{display:block;}
+
+  .hud{position:absolute;pointer-events:none;}
+  .hud-top{top:0;left:0;right:0;padding:22px 28px;display:flex;justify-content:space-between;
+    align-items:flex-start;background:linear-gradient(180deg,rgba(0,0,0,0.45),transparent);}
+  .hole-title{font-weight:700;font-size:20px;letter-spacing:0.02em;}
+  .hole-sub{font-size:12px;color:var(--ink-dim);margin-top:2px;letter-spacing:0.06em;text-transform:uppercase;}
+  .hud-badge{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--ok);
+    border:1px solid rgba(127,206,127,0.4);padding:4px 10px;border-radius:2px;letter-spacing:0.08em;
+    white-space:nowrap;}
+  .hud-badge.warn{color:var(--warn);border-color:rgba(232,163,85,0.4);}
+  .hud-badge.err{color:var(--err);border-color:rgba(224,122,107,0.5);}
+
+  .telemetry{position:absolute;bottom:26px;left:28px;right:28px;display:flex;gap:1px;
+    background:rgba(232,163,85,0.15);border-radius:6px;overflow:hidden;
+    box-shadow:0 8px 30px rgba(0,0,0,0.4);}
+  .metric{flex:1;background:var(--panel);backdrop-filter:blur(6px);padding:14px 16px;}
+  .metric-label{font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--ink-dim);}
+  .metric-value{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:600;
+    margin-top:4px;color:var(--ink);}
+  .metric-value span{font-size:13px;color:var(--ink-dim);font-weight:400;margin-left:3px;}
+  .metric.warn .metric-value{color:var(--accent);}
+
+  .progress-rail{position:absolute;bottom:104px;left:28px;right:28px;height:3px;
+    background:rgba(255,255,255,0.12);border-radius:2px;pointer-events:none;}
+  .progress-fill{height:100%;width:0%;background:var(--accent);border-radius:2px;
+    transition:width 0.05s linear;}
+
+  .controls{position:absolute;top:22px;right:28px;display:flex;gap:8px;pointer-events:auto;flex-wrap:wrap;
+    justify-content:flex-end;max-width:60vw;}
+  .btn{font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:0.06em;
+    background:var(--panel);color:var(--ink);border:1px solid rgba(255,255,255,0.18);
+    padding:8px 14px;border-radius:3px;cursor:pointer;backdrop-filter:blur(6px);
+    text-transform:uppercase;transition:background 0.15s,border-color 0.15s;}
+  .btn:hover{background:rgba(232,163,85,0.18);border-color:var(--accent);}
+
+  .note{position:absolute;top:78px;right:28px;max-width:260px;font-size:11px;
+    line-height:1.5;color:var(--ink-dim);text-align:right;pointer-events:none;}
+  .note b{color:var(--ink);}
+
+  /* Loading / status overlay */
+  #status{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;gap:14px;background:radial-gradient(circle at 50% 40%,#123 0%,#050a08 100%);
+    z-index:10;transition:opacity 0.6s;pointer-events:none;text-align:center;padding:0 24px;}
+  #status.hidden{opacity:0;}
+  .status-spinner{width:34px;height:34px;border:3px solid rgba(232,163,85,0.25);
+    border-top-color:var(--accent);border-radius:50%;animation:spin 0.9s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  #status-msg{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ink-dim);letter-spacing:0.04em;}
+  #status-detail{font-size:11px;color:var(--ink-dim);opacity:0.7;max-width:420px;}
+</style>
+</head>
+<body>
+
+<div id="canvas-wrap"></div>
+
+<div class="hud hud-top">
+  <div>
+    <div class="hole-title" id="holeTitle">Loading…</div>
+    <div class="hole-sub" id="holeSub">Whistling Straits — The Straits</div>
+  </div>
+  <div class="hud-badge" id="dataBadge">FETCHING REAL DATA</div>
+</div>
+
+<div class="controls">
+  <button class="btn" id="playBtn">Replay flyover</button>
+  <button class="btn" id="speedBtn">Speed: 1x</button>
+  <button class="btn" id="holeBtn">Hole ▸</button>
+</div>
+
+<div class="note" id="sourceNote"></div>
+
+<div class="progress-rail"><div class="progress-fill" id="progressFill"></div></div>
+
+<div class="telemetry">
+  <div class="metric">
+    <div class="metric-label">Distance to pin</div>
+    <div class="metric-value" id="distVal">—<span>yd</span></div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Elevation change</div>
+    <div class="metric-value" id="elevVal">—<span>ft</span></div>
+  </div>
+  <div class="metric warn">
+    <div class="metric-label">Camera altitude</div>
+    <div class="metric-value" id="altVal">—<span>ft AGL</span></div>
+  </div>
+  <div class="metric">
+    <div class="metric-label">Flight progress</div>
+    <div class="metric-value" id="progVal">0<span>%</span></div>
+  </div>
+</div>
+
+<div id="status">
+  <div class="status-spinner"></div>
+  <div id="status-msg">Fetching real course data…</div>
+  <div id="status-detail"></div>
+</div>
+
+<script type="module" src="/src/main.js"></script>
+</body>
+</html>

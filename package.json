@@ -1,0 +1,20 @@
+{
+  "name": "golf-hole-flyover",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Real-data Three.js golf hole flyover (OSM geometry + USGS 3DEP elevation + Esri/Mapbox imagery)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "bake": "node scripts/bake-hole.mjs",
+    "test": "node --test 'test/*.test.mjs'"
+  },
+  "dependencies": {
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}
