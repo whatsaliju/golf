@@ -32,12 +32,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      # Served from the custom subdomain golf.lijuvarughese.com at its root,
-      # so the base path is "/". (For a bare *.github.io/<repo>/ project URL
-      # instead, set VITE_BASE to "/<repo>/".)
+      # Relative base ("./") so one build works at any path: the bare
+      # *.github.io/<repo>/ URL, a custom subdomain root (golf.lijuvarughese.com),
+      # or a Bluehost /golf/ subfolder.
       - run: npm run build
         env:
-          VITE_BASE: /
+          VITE_BASE: ./
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
