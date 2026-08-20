@@ -34,20 +34,20 @@ async function loadLive(resolved, onProgress) {
 
   const hole = assembleHole(parsed, ref, null); // elevation filled after terrain loads
 
-  // Best-effort 3D context (buildings, tree cover) — never blocks the hole.
-  let context = null;
-  try {
-    onProgress?.('Fetching 3D context (buildings, trees)…');
-    const csignal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined;
-    context = parseContext(await fetchContext(hole.bbox, { signal: csignal }));
-  } catch (e) { console.warn('context fetch skipped:', e.message); }
-
   return {
     meta: { title: resolved.title || course.displayName, subtitle: resolved.subtitle || `Hole ${ref}`,
       location: course.location, attribution: '', source: 'live' },
     hole,
     geojson: holeToGeoJSON(hole),
-    context: contextToGeoJSON(context),
+    context: contextToGeoJSON(null), // populated later, in the background
+    // Best-effort 3D context — fetched AFTER the flyover is on screen so it
+    // never blocks the reveal. Returns GeoJSON collections or null.
+    loadContext: async () => {
+      try {
+        const csignal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined;
+        return contextToGeoJSON(parseContext(await fetchContext(hole.bbox, { signal: csignal })));
+      } catch (e) { console.warn('context skipped:', e.message); return null; }
+    },
     course,
   };
 }
