@@ -39,7 +39,24 @@ No. Everything above is free. One nuance on *open*:
 The default (`imagerySource: 'usgs'`) is fully public-domain. Switch per course in
 `src/config/holes.js`.
 
-## Run
+## View online (no local install)
+
+Can't install Node locally? Deploy it to the web and open it as a URL:
+
+**GitHub Pages (free, built in the cloud):** a workflow at
+`.github/workflows/deploy-pages.yml` builds and publishes on every push to `main`.
+One-time: **Settings → Pages → Source = "GitHub Actions"**, then open
+`https://<user>.github.io/<repo>/`. (Free Pages needs a **public** repo, or GitHub
+Pro for a private one.)
+
+**Netlify / Cloudflare Pages (free, works with private repos):** "Add site → import
+from GitHub", pick this repo. Build command `npm run build`, publish directory
+`dist`. It auto-builds and gives you a URL.
+
+**Instant, zero setup:** open `https://stackblitz.com/github/<user>/<repo>` — runs the
+dev server in your browser (sign in with GitHub for a private repo).
+
+## Run locally
 
 ```bash
 npm install

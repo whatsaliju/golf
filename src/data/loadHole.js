@@ -9,7 +9,8 @@ import { holeToGeoJSON, contextToGeoJSON } from './holeGeoJSON.js';
 import { pathLengthMeters, M_TO_YD } from './geo.js';
 
 async function loadBaked(resolved) {
-  const res = await fetch(`/holes/${resolved.id}.json`, { cache: 'no-cache' }).catch(() => null);
+  const base = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) || '/';
+  const res = await fetch(`${base}holes/${resolved.id}.json`, { cache: 'no-cache' }).catch(() => null);
   if (!res || !res.ok) return null;
   const baked = await res.json();
   return {
