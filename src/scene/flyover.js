@@ -55,6 +55,7 @@ function buildFrames(hole, opts) {
 
 export function createFlyover(map, hud) {
   let frames = [], hole = null, idx = 0, playing = false, speed = 1, raf = null, last = 0;
+  let onDone = null;
 
   const groundAt = (lngLat) => {
     const e = map.queryTerrainElevation(lngLat, { exaggerated: false });
@@ -75,11 +76,13 @@ export function createFlyover(map, hud) {
     const dt = last ? (ts - last) / 16.67 : 1; last = ts;
     if (!playing) return; // idle → let the user pan/orbit freely after the flight
     idx += speed * dt;
-    if (idx >= frames.length - 1) { idx = frames.length - 1; playing = false; }
+    let finished = false;
+    if (idx >= frames.length - 1) { idx = frames.length - 1; playing = false; finished = true; }
     const frame = frames[Math.floor(idx)];
     apply(frame);
     const progress = Math.floor(idx) / (frames.length - 1);
     hud.update({ altitude: frame.agl }, progress, hole);
+    if (finished && onDone) { const cb = onDone; onDone = null; cb(); }
   }
 
   return {
@@ -90,7 +93,7 @@ export function createFlyover(map, hud) {
       apply(frames[0]);
       if (!raf) raf = requestAnimationFrame(tick);
     },
-    replay() { idx = 0; playing = true; },
+    replay(done) { idx = 0; playing = true; onDone = done || null; },
     setSpeed(s) { speed = s; },
     isReady: () => frames.length > 0,
   };

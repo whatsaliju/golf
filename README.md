@@ -11,6 +11,12 @@ stack. No API keys, no accounts, no paid tiers required.
   USGS **3DEP**-sourced), used as a MapLibre `raster-dem` source with hillshade.
 - **Satellite:** **USGS Imagery / NAIP** — **public domain**, no token
   (`basemap.nationalmap.gov`). Esri World Imagery and Mapbox are optional fallbacks.
+- **3D realism:** OSM buildings (clubhouse) and tree cover extruded in 3D, an
+  extruded flagstick at the pin, warm directional lighting, atmospheric sky, a
+  toggleable terrain **Relief** exaggeration (1×/1.5×/2× — makes the dunes read),
+  and subtly animated water hazards.
+- **One-click video export:** the **● Record** button captures a fresh flyover from
+  the map canvas and downloads it as a `.webm`.
 - **Yardage** and **elevation change** are computed from the real geometry +
   terrain (`queryTerrainElevation`), not hardcoded. The camera choreography
   (Catmull-Rom spline, ease-in-out descent, orbit-around-green) and the telemetry
@@ -43,6 +49,10 @@ npm run dev        # open the printed localhost URL
 Everything is fetched live in the browser (all sources are CORS-enabled; no proxy
 needed). Drag to orbit, scroll to zoom, right-drag to rotate/pitch. After the
 flyover finishes the camera is released for free exploration.
+
+Controls (top-right): **Replay flyover**, **Speed** (1x/2x/0.5x), **Relief**
+(terrain exaggeration 1x/1.5x/2x — makes the dunes read), **● Record** (exports a
+`.webm` of a fresh flyover), and **Hole ▸** once more than one hole is registered.
 
 ```bash
 npm run build && npm run preview   # production build

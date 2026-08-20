@@ -26,17 +26,24 @@ export const COURSES = {
  * The flyover sequence. Order here is the order the "Hole ▸" button cycles,
  * and the order a full 18-hole reel would play.
  */
-export const HOLES = [
-  {
-    id: 'ws-1',
-    courseId: 'whistling-straits',
-    ref: '1', // OSM golf=hole ref
-    title: 'Whistling Straits — The Straits',
-    subtitle: 'Hole 1 · Outward Bound',
-  },
-  // Add holes 2–18 here as you verify each in OSM, e.g.:
-  // { id: 'ws-2', courseId: 'whistling-straits', ref: '2', title: '…', subtitle: 'Hole 2' },
+// The Straits course, all 18. `ref` is the OSM golf=hole reference; par and
+// yardage come from the data at load time. Names are the course's own hole
+// names. If a hole's OSM tagging is missing, that hole falls back to a labelled
+// placeholder on the real terrain rather than breaking the reel.
+const STRAITS_NAMES = [
+  'Outward Bound', 'Cross Country', "O'Man", 'Glory', 'Snake', "Gremlin's Ear",
+  'Shipwreck', 'On the Rocks', 'Down and Dirty', 'Voyageur', 'Sand Box', 'Pop Up',
+  'Cliff Hanger', "Widow's Watch", 'Grand Strand', 'Endless Bite', 'Pinched Nerve',
+  'Dyeabolical',
 ];
+
+export const HOLES = STRAITS_NAMES.map((name, i) => ({
+  id: `ws-${i + 1}`,
+  courseId: 'whistling-straits',
+  ref: String(i + 1), // OSM golf=hole ref
+  title: 'Whistling Straits — The Straits',
+  subtitle: `Hole ${i + 1} · ${name}`,
+}));
 
 export function resolveHole(holeCfg) {
   const course = COURSES[holeCfg.courseId];

@@ -14,7 +14,7 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { COURSES, HOLES } from '../src/config/holes.js';
-import { fetchOverpass, parseOverpass, filterToCourse } from '../src/data/overpass.js';
+import { fetchOverpass, parseOverpass, filterToCourse, fetchContext, parseContext } from '../src/data/overpass.js';
 import { assembleHole } from '../src/data/holeModel.js';
 import { imagerySource } from '../src/data/endpoints.js';
 import { lonToTileX, latToTileY, tileRangeForBbox, pickZoomForBbox, terrariumToMeters } from '../src/data/tiles.js';
@@ -68,9 +68,14 @@ async function main() {
   const sampler = await terrariumSampler(geo0.bbox);
   const hole = assembleHole(parsed, ref, sampler);
 
+  console.log('  → 3D context (buildings, trees)…');
+  let context = null;
+  try { context = parseContext(await fetchContext(hole.bbox)); }
+  catch (e) { console.warn('  (context skipped:', e.message, ')'); }
+
   await mkdir(resolve(ROOT, 'public/holes'), { recursive: true });
   const doc = {
-    id: outId, title: course.displayName, location: course.location, hole,
+    id: outId, title: course.displayName, location: course.location, hole, context,
     attribution: imagerySource(course.imagerySource).attribution,
   };
   await writeFile(resolve(ROOT, 'public/holes', `${outId}.json`), JSON.stringify(doc));

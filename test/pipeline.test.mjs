@@ -7,9 +7,9 @@ import {
 import {
   haversineMeters, pathLengthMeters, centroid, pointInRing, bearing, catmullRom, bboxOf,
 } from '../src/data/geo.js';
-import { parseOverpass, filterToCourse } from '../src/data/overpass.js';
+import { parseOverpass, filterToCourse, parseContext } from '../src/data/overpass.js';
 import { assembleHole } from '../src/data/holeModel.js';
-import { holeToGeoJSON } from '../src/data/holeGeoJSON.js';
+import { holeToGeoJSON, contextToGeoJSON } from '../src/data/holeGeoJSON.js';
 
 test('tile math round-trips', () => {
   const z = 14;
@@ -94,6 +94,24 @@ test('assembleHole computes real yardage, orientation and elevation', () => {
   assert.ok(hole.greenCenter[1] > 43.852);
   assert.ok(Math.abs(hole.elevationChangeFt - 12) <= 1, `elev ${hole.elevationChangeFt}`);
   assert.equal(hole.bunkerRings.length, 1);
+});
+
+test('parseContext + contextToGeoJSON classify buildings/canopy/trees', () => {
+  const ctxJson = {
+    elements: [
+      { type: 'way', id: 10, tags: { building: 'yes', 'building:levels': '2' }, geometry: [{ lon: 0, lat: 0 }, { lon: 0.001, lat: 0 }, { lon: 0.001, lat: 0.001 }, { lon: 0, lat: 0.001 }] },
+      { type: 'way', id: 11, tags: { natural: 'wood' }, geometry: [{ lon: 1, lat: 1 }, { lon: 1.001, lat: 1 }, { lon: 1.001, lat: 1.001 }, { lon: 1, lat: 1.001 }] },
+      { type: 'node', id: 12, tags: { natural: 'tree' }, lon: 2, lat: 2 },
+    ],
+  };
+  const ctx = parseContext(ctxJson);
+  assert.equal(ctx.buildings.length, 1);
+  assert.ok(Math.abs(ctx.buildings[0].height - 6.4) < 0.01); // 2 levels * 3.2
+  assert.equal(ctx.canopy.length, 1);
+  assert.deepEqual(ctx.trees[0], [2, 2]);
+  const gj = contextToGeoJSON(ctx);
+  assert.equal(gj.buildings.features[0].properties.height, ctx.buildings[0].height);
+  assert.equal(gj.trees.features[0].geometry.type, 'Point');
 });
 
 test('holeToGeoJSON produces valid closed polygons + linestring', () => {

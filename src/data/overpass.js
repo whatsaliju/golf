@@ -28,7 +28,61 @@ export async function fetchOverpass(bbox, { fetchImpl = fetch, signal } = {}) {
   return res.json();
 }
 
+/** Context features (buildings, tree cover) for 3D realism, in a bbox. */
+export function buildContextQuery(bbox) {
+  const b = `${bbox.south},${bbox.west},${bbox.north},${bbox.east}`;
+  return `[out:json][timeout:90];
+(
+  way["building"](${b});
+  way["natural"="wood"](${b});
+  way["landuse"="forest"](${b});
+  way["natural"="scrub"](${b});
+  node["natural"="tree"](${b});
+);
+out geom tags;`;
+}
+
+export async function fetchContext(bbox, { fetchImpl = fetch, signal } = {}) {
+  const body = new URLSearchParams({ data: buildContextQuery(bbox) });
+  const res = await fetchImpl(overpassUrl(), {
+    method: 'POST', body, signal,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
+  if (!res.ok) throw new Error(`Overpass ${res.status} ${res.statusText}`);
+  return res.json();
+}
+
 const num = (v) => (v == null || v === '' ? undefined : Number(v));
+
+function buildingHeight(tags) {
+  const h = num(tags.height);
+  if (Number.isFinite(h)) return h;
+  const lv = num(tags['building:levels']);
+  if (Number.isFinite(lv)) return Math.max(3, lv * 3.2);
+  return 6;
+}
+
+/** Classify context features into extrudable buildings, tree canopy, tree points. */
+export function parseContext(json) {
+  const out = { buildings: [], canopy: [], trees: [] };
+  for (const el of json.elements || []) {
+    const tags = el.tags || {};
+    if (el.type === 'node' && tags.natural === 'tree') {
+      if (Number.isFinite(el.lon) && Number.isFinite(el.lat)) out.trees.push([el.lon, el.lat]);
+      continue;
+    }
+    const ring = toRing(el.geometry);
+    if (ring.length < 3) continue;
+    if (tags.building) {
+      out.buildings.push({ ring, height: buildingHeight(tags), minHeight: num(tags.min_height) || 0 });
+    } else if (tags.natural === 'wood' || tags.landuse === 'forest') {
+      out.canopy.push({ ring, height: 12 });
+    } else if (tags.natural === 'scrub') {
+      out.canopy.push({ ring, height: 4 });
+    }
+  }
+  return out;
+}
 const toRing = (geometry) =>
   Array.isArray(geometry) ? geometry.map((p) => [p.lon, p.lat]) : [];
 
