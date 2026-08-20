@@ -45,6 +45,7 @@ const map = new maplibregl.Map({
   pitch: 65,
   maxPitch: 85,
   antialias: true,
+  preserveDrawingBuffer: true, // enables canvas capture for the Record button
   attributionControl: { compact: true },
 });
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
@@ -54,18 +55,46 @@ const flyover = createFlyover(map, hud);
 
 // ---- hole overlay layers ----------------------------------------------------
 const OVERLAY_IDS = [
-  'water-fill', 'water-line', 'fairway-fill', 'fairway-line', 'bunker-fill', 'bunker-line',
-  'green-fill', 'green-line', 'tee-line', 'centerline', 'pin', 'teept',
+  'buildings-3d', 'canopy-3d', 'trees', 'water-fill', 'water-line', 'fairway-fill', 'fairway-line',
+  'bunker-fill', 'bunker-line', 'green-fill', 'green-line', 'tee-line', 'centerline', 'pin', 'teept',
+  'flagstick-3d',
 ];
-const SOURCE_IDS = ['fairways', 'greens', 'bunkers', 'water', 'tees', 'centerline', 'pin', 'teePoint'];
+const SOURCE_IDS = ['fairways', 'greens', 'bunkers', 'water', 'tees', 'centerline', 'pin', 'teePoint',
+  'buildings', 'canopy', 'ctxTrees', 'flagstick'];
 
 function clearOverlays() {
   for (const id of OVERLAY_IDS) if (map.getLayer(id)) map.removeLayer(id);
   for (const id of SOURCE_IDS) if (map.getSource(id)) map.removeSource(id);
 }
 
-function addOverlays(geo) {
-  for (const id of SOURCE_IDS) map.addSource(id, { type: 'geojson', data: geo[id] });
+// tiny square (metres) around a lng/lat, for the extruded flagstick
+function squareAround([lng, lat], m) {
+  const dLat = m / 111320, dLon = m / (111320 * Math.cos((lat * Math.PI) / 180) || 1);
+  return [[lng - dLon, lat - dLat], [lng + dLon, lat - dLat], [lng + dLon, lat + dLat], [lng - dLon, lat + dLat], [lng - dLon, lat - dLat]];
+}
+
+function addOverlays(geo, ctx, hole) {
+  for (const id of ['fairways', 'greens', 'bunkers', 'water', 'tees', 'centerline', 'pin', 'teePoint']) {
+    map.addSource(id, { type: 'geojson', data: geo[id] });
+  }
+  map.addSource('buildings', { type: 'geojson', data: ctx.buildings });
+  map.addSource('canopy', { type: 'geojson', data: ctx.canopy });
+  map.addSource('ctxTrees', { type: 'geojson', data: ctx.trees });
+  map.addSource('flagstick', { type: 'geojson', data: {
+    type: 'FeatureCollection',
+    features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [squareAround(hole.greenCenter, 0.25)] } }],
+  } });
+
+  // 3D context first (extrusions), then draped hole overlays on top
+  map.addLayer({ id: 'canopy-3d', type: 'fill-extrusion', source: 'canopy', paint: {
+    'fill-extrusion-color': '#2f6b34', 'fill-extrusion-height': ['get', 'height'], 'fill-extrusion-base': 0,
+    'fill-extrusion-opacity': 0.85 } });
+  map.addLayer({ id: 'buildings-3d', type: 'fill-extrusion', source: 'buildings', paint: {
+    'fill-extrusion-color': '#c9c3b6', 'fill-extrusion-height': ['get', 'height'],
+    'fill-extrusion-base': ['get', 'minHeight'], 'fill-extrusion-opacity': 0.95,
+    'fill-extrusion-vertical-gradient': true } });
+  map.addLayer({ id: 'trees', type: 'circle', source: 'ctxTrees', paint: {
+    'circle-radius': 3, 'circle-color': '#3f7a3f', 'circle-opacity': 0.85 } });
   map.addLayer({ id: 'water-fill', type: 'fill', source: 'water', paint: { 'fill-color': '#2b6ca3', 'fill-opacity': 0.45 } });
   map.addLayer({ id: 'water-line', type: 'line', source: 'water', paint: { 'line-color': '#8ecbff', 'line-width': 1.2, 'line-opacity': 0.7 } });
   map.addLayer({ id: 'fairway-fill', type: 'fill', source: 'fairways', paint: { 'fill-color': '#63b356', 'fill-opacity': 0.12 } });
@@ -78,6 +107,9 @@ function addOverlays(geo) {
   map.addLayer({ id: 'centerline', type: 'line', source: 'centerline', paint: { 'line-color': '#e8a355', 'line-width': 2, 'line-dasharray': [2, 2], 'line-opacity': 0.85 } });
   map.addLayer({ id: 'pin', type: 'circle', source: 'pin', paint: { 'circle-radius': 6, 'circle-color': '#c0392b', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
   map.addLayer({ id: 'teept', type: 'circle', source: 'teePoint', paint: { 'circle-radius': 5, 'circle-color': '#eef2ee', 'circle-stroke-color': '#1a2a1e', 'circle-stroke-width': 1.5 } });
+  // 3D flagstick at the pin
+  map.addLayer({ id: 'flagstick-3d', type: 'fill-extrusion', source: 'flagstick', paint: {
+    'fill-extrusion-color': '#c0392b', 'fill-extrusion-height': 4, 'fill-extrusion-base': 0, 'fill-extrusion-opacity': 1 } });
 }
 
 // ---- elevation change from real terrain ------------------------------------
@@ -105,7 +137,7 @@ async function present(i) {
   data.meta.attribution = data.meta.attribution || imagerySource(resolved.course.imagerySource).attribution;
 
   clearOverlays();
-  addOverlays(data.geojson);
+  addOverlays(data.geojson, data.context, data.hole);
   hud.setHole(data.meta, data.hole);
 
   const b = bearing(data.hole.tee, data.hole.greenCenter);
@@ -131,9 +163,46 @@ document.getElementById('speedBtn').onclick = (e) => {
   flyover.setSpeed(speed);
   e.target.textContent = `Speed: ${speed}x`;
 };
+
+let relief = 1;
+document.getElementById('reliefBtn').onclick = (e) => {
+  relief = relief === 1 ? 1.5 : relief === 1.5 ? 2 : 1;
+  try { map.setTerrain({ source: 'dem', exaggeration: relief }); } catch (err) { console.warn(err); }
+  e.target.textContent = `Relief: ${relief}x`;
+};
+
 const holeBtn = document.getElementById('holeBtn');
 if (HOLES.length < 2) holeBtn.style.display = 'none';
 holeBtn.onclick = () => present(holeIdx + 1);
+
+// ---- one-click flyover recording (canvas → .webm) --------------------------
+let recorder = null;
+const recBtn = document.getElementById('recBtn');
+function stopRecording() {
+  if (recorder && recorder.state !== 'inactive') recorder.stop();
+}
+recBtn.onclick = () => {
+  if (recorder && recorder.state === 'recording') { stopRecording(); return; }
+  const canvas = map.getCanvas();
+  const stream = typeof canvas.captureStream === 'function' ? canvas.captureStream(30) : null;
+  if (!stream || typeof MediaRecorder === 'undefined') { alert('Recording is not supported in this browser.'); return; }
+  const mime = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find((m) => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+  const chunks = [];
+  recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8_000_000 });
+  recorder.ondataavailable = (ev) => ev.data.size && chunks.push(ev.data);
+  recorder.onstop = () => {
+    recBtn.textContent = '● Record';
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${(current?.meta?.title || 'flyover').replace(/[^\w]+/g, '-').toLowerCase()}-hole${current?.hole?.ref || ''}.webm`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  };
+  recorder.start();
+  recBtn.textContent = '■ Stop';
+  flyover.replay(() => stopRecording()); // record a fresh flight, auto-stop at the end
+};
 
 // ---- go ---------------------------------------------------------------------
 map.on('load', () => {
@@ -144,5 +213,17 @@ map.on('load', () => {
       'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.4, 'atmosphere-blend': 0.7,
     });
   } catch (e) { console.warn('sky:', e); }
+  // warm low sun so the 3D extrusions + terrain read with depth
+  try { map.setLight({ anchor: 'map', color: '#fff2df', intensity: 0.55, position: [1.4, 210, 30] }); } catch (e) { console.warn('light:', e); }
+
+  // subtle animated shimmer on water hazards
+  const shimmer = () => {
+    if (map.getLayer('water-fill')) {
+      map.setPaintProperty('water-fill', 'fill-opacity', 0.42 + Math.sin(performance.now() / 900) * 0.06);
+    }
+    requestAnimationFrame(shimmer);
+  };
+  requestAnimationFrame(shimmer);
+
   present(0).catch((err) => { console.error(err); showStatus('Failed to initialise', String(err && err.message)); });
 });

@@ -3,9 +3,9 @@
 // Elevation change is filled in by the map after terrain loads (live/placeholder)
 // or read from the baked file.
 
-import { fetchOverpass, parseOverpass, filterToCourse } from './overpass.js';
+import { fetchOverpass, parseOverpass, filterToCourse, fetchContext, parseContext } from './overpass.js';
 import { assembleHole } from './holeModel.js';
-import { holeToGeoJSON } from './holeGeoJSON.js';
+import { holeToGeoJSON, contextToGeoJSON } from './holeGeoJSON.js';
 import { pathLengthMeters, M_TO_YD } from './geo.js';
 
 async function loadBaked(resolved) {
@@ -17,6 +17,7 @@ async function loadBaked(resolved) {
       location: baked.location, attribution: baked.attribution, source: 'baked' },
     hole: baked.hole,
     geojson: holeToGeoJSON(baked.hole),
+    context: contextToGeoJSON(baked.context || null),
     course: resolved.course,
   };
 }
@@ -31,11 +32,21 @@ async function loadLive(resolved, onProgress) {
   if (!parsed.holes.length && !parsed.tees.length) throw new Error('No golf features for this bbox/course');
 
   const hole = assembleHole(parsed, ref, null); // elevation filled after terrain loads
+
+  // Best-effort 3D context (buildings, tree cover) — never blocks the hole.
+  let context = null;
+  try {
+    onProgress?.('Fetching 3D context (buildings, trees)…');
+    const csignal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined;
+    context = parseContext(await fetchContext(hole.bbox, { signal: csignal }));
+  } catch (e) { console.warn('context fetch skipped:', e.message); }
+
   return {
     meta: { title: resolved.title || course.displayName, subtitle: resolved.subtitle || `Hole ${ref}`,
       location: course.location, attribution: '', source: 'live' },
     hole,
     geojson: holeToGeoJSON(hole),
+    context: contextToGeoJSON(context),
     course,
   };
 }
@@ -59,7 +70,7 @@ function loadPlaceholder(resolved, reason) {
   return {
     meta: { title: resolved.title || course.displayName, subtitle: `${resolved.subtitle || ''} · PLACEHOLDER`.trim(),
       location: course.location, attribution: '', source: 'placeholder', reason },
-    hole, geojson: holeToGeoJSON(hole), course,
+    hole, geojson: holeToGeoJSON(hole), context: contextToGeoJSON(null), course,
   };
 }
 

@@ -13,6 +13,27 @@ const poly = (rings, props = {}) =>
     type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: [closeRing(r)] },
   }));
 
+/** Context (buildings / tree canopy / trees) → GeoJSON for 3D extrusion layers. */
+export function contextToGeoJSON(ctx) {
+  if (!ctx) return { buildings: fc([]), canopy: fc([]), trees: fc([]) };
+  const buildings = fc(
+    (ctx.buildings || []).filter((b) => b.ring.length >= 3).map((b) => ({
+      type: 'Feature', properties: { height: b.height, minHeight: b.minHeight },
+      geometry: { type: 'Polygon', coordinates: [closeRing(b.ring)] },
+    }))
+  );
+  const canopy = fc(
+    (ctx.canopy || []).filter((c) => c.ring.length >= 3).map((c) => ({
+      type: 'Feature', properties: { height: c.height },
+      geometry: { type: 'Polygon', coordinates: [closeRing(c.ring)] },
+    }))
+  );
+  const trees = fc(
+    (ctx.trees || []).map((p) => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: p } }))
+  );
+  return { buildings, canopy, trees };
+}
+
 export function holeToGeoJSON(hole) {
   return {
     fairways: fc(poly(hole.fairwayRings, { kind: 'fairway' })),
