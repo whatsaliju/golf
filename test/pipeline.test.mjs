@@ -4,9 +4,12 @@ import assert from 'node:assert/strict';
 import {
   lonToTileX, latToTileY, tileXToLon, tileYToLat, tileRangeForBbox, terrariumToMeters,
 } from '../src/data/tiles.js';
-import { makeProjection, haversineMeters } from '../src/data/projection.js';
-import { parseOverpass, filterToCourse, pointInRing } from '../src/data/overpass.js';
+import {
+  haversineMeters, pathLengthMeters, centroid, pointInRing, bearing, catmullRom, bboxOf,
+} from '../src/data/geo.js';
+import { parseOverpass, filterToCourse } from '../src/data/overpass.js';
 import { assembleHole } from '../src/data/holeModel.js';
+import { holeToGeoJSON } from '../src/data/holeGeoJSON.js';
 
 test('tile math round-trips', () => {
   const z = 14;
@@ -17,7 +20,6 @@ test('tile math round-trips', () => {
 });
 
 test('terrarium decode matches spec', () => {
-  // sea level is encoded as (32768) → R=128,G=0,B=0
   assert.equal(terrariumToMeters(128, 0, 0), 0);
   assert.equal(terrariumToMeters(129, 0, 0), 256);
   assert.ok(Math.abs(terrariumToMeters(128, 100, 0) - 100) < 1e-9);
@@ -28,33 +30,35 @@ test('tileRangeForBbox is ordered and non-empty', () => {
   assert.ok(r.x1 >= r.x0 && r.y1 >= r.y0 && r.count > 0);
 });
 
-test('projection round-trips and scales sanely', () => {
-  const proj = makeProjection({ lat: 43.85, lon: -87.72 });
-  const [x, z] = proj.toLocal(-87.72, 43.85);
-  assert.ok(Math.hypot(x, z) < 1e-6); // origin maps to ~0
-  const [lon, lat] = proj.toLatLon(100, -100);
-  const back = proj.toLocal(lon, lat);
-  assert.ok(Math.abs(back[0] - 100) < 1e-3 && Math.abs(back[1] + 100) < 1e-3);
-  // 0.003234° north ≈ 360 m
-  const north = proj.toLocal(-87.72, 43.853234);
-  assert.ok(Math.abs(-north[1] - 360) < 2); // z is negative going north
+test('geo distance/length/bearing sane', () => {
+  assert.ok(Math.abs(haversineMeters([-87.72, 43.85], [-87.72, 43.853234]) - 360) < 3);
+  assert.ok(Math.abs(pathLengthMeters([[0, 0], [0, 0.001], [0, 0.002]]) - haversineMeters([0, 0], [0, 0.002])) < 1);
+  assert.ok(Math.abs(bearing([-87.72, 43.85], [-87.72, 43.86]) - 0) < 0.5); // due north
 });
 
-// ---- synthetic Overpass fixture --------------------------------------------
-const O = { lat: 43.85, lon: -87.72 };
+test('centroid, pointInRing, catmullRom, bbox', () => {
+  const ring = [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]];
+  const c = centroid(ring);
+  assert.ok(Math.abs(c[0] - 5) < 1e-6 && Math.abs(c[1] - 5) < 1e-6);
+  assert.ok(pointInRing([5, 5], ring) && !pointInRing([15, 5], ring));
+  const pts = [[0, 0], [1, 1], [2, 0], [3, 1]];
+  assert.deepEqual(catmullRom(pts, 0).map(Math.round), [0, 0]);
+  assert.deepEqual(catmullRom(pts, 1).map(Math.round), [3, 1]);
+  const bb = bboxOf([ring], 0);
+  assert.deepEqual([bb.west, bb.south, bb.east, bb.north], [0, 0, 10, 10]);
+});
+
+// ---- synthetic Overpass fixture (lng/lat) ----------------------------------
 const square = (lon, lat, d) => [
   { lon: lon - d, lat: lat - d }, { lon: lon + d, lat: lat - d },
-  { lon: lon + d, lat: lat + d }, { lon: lon - d, lat: lat + d },
-  { lon: lon - d, lat: lat - d },
+  { lon: lon + d, lat: lat + d }, { lon: lon - d, lat: lat + d }, { lon: lon - d, lat: lat - d },
 ];
 const greenLat = 43.853234; // ~360 m north of tee
 
 const fixture = {
   elements: [
-    { type: 'way', id: 1, tags: { leisure: 'golf_course', name: 'Whistling Straits' },
-      geometry: square(-87.72, 43.8516, 0.01) },
-    { type: 'way', id: 2, tags: { golf: 'hole', ref: '1', par: '4' },
-      geometry: [{ lon: -87.72, lat: 43.85 }, { lon: -87.72, lat: greenLat }] },
+    { type: 'way', id: 1, tags: { leisure: 'golf_course', name: 'Whistling Straits' }, geometry: square(-87.72, 43.8516, 0.01) },
+    { type: 'way', id: 2, tags: { golf: 'hole', ref: '1', par: '4' }, geometry: [{ lon: -87.72, lat: 43.85 }, { lon: -87.72, lat: greenLat }] },
     { type: 'way', id: 3, tags: { golf: 'tee', ref: '1' }, geometry: square(-87.72, 43.85, 0.0002) },
     { type: 'way', id: 4, tags: { golf: 'green', ref: '1' }, geometry: square(-87.72, greenLat, 0.0002) },
     { type: 'way', id: 5, tags: { golf: 'bunker' }, geometry: square(-87.7205, greenLat - 0.0004, 0.0001) },
@@ -62,50 +66,42 @@ const fixture = {
   ],
 };
 
-test('parseOverpass classifies and projects features', () => {
-  const proj = makeProjection(O);
-  const parsed = parseOverpass(fixture, proj);
+test('parseOverpass classifies + keeps lng/lat', () => {
+  const parsed = parseOverpass(fixture);
   assert.equal(parsed.courses.length, 1);
   assert.equal(parsed.holes.length, 1);
   assert.equal(parsed.tees.length, 1);
   assert.equal(parsed.greens.length, 1);
   assert.equal(parsed.bunkers.length, 1);
   assert.equal(parsed.holes[0].ref, '1');
-  // tee centroid ~ origin
-  assert.ok(Math.hypot(...parsed.tees[0].center) < 5);
+  assert.ok(Math.abs(parsed.tees[0].center[0] + 87.72) < 1e-4);
 });
 
 test('filterToCourse keeps features inside the named course', () => {
-  const proj = makeProjection(O);
-  const parsed = filterToCourse(parseOverpass(fixture, proj), 'Whistling Straits');
+  const parsed = filterToCourse(parseOverpass(fixture), 'Whistling Straits');
   assert.equal(parsed.holes.length, 1);
   assert.equal(parsed.greens.length, 1);
 });
 
-test('pointInRing basic', () => {
-  const ring = [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]];
-  assert.ok(pointInRing([5, 5], ring));
-  assert.ok(!pointInRing([15, 5], ring));
-});
-
-test('assembleHole computes real yardage, orientation and elevation change', () => {
-  const proj = makeProjection(O);
-  const parsed = filterToCourse(parseOverpass(fixture, proj), 'Whistling Straits');
-  // sampler: elevation rises going north (z more negative → higher)
-  const sample = (x, z) => -z * 0.01;
+test('assembleHole computes real yardage, orientation and elevation', () => {
+  const parsed = filterToCourse(parseOverpass(fixture), 'Whistling Straits');
+  const sample = (lng, lat) => (lat - 43.85) * 1113; // ~+3.6 m at the green
   const hole = assembleHole(parsed, '1', sample);
 
   assert.equal(hole.par, 4);
-  // 360 m ≈ 393.7 yd
   assert.ok(Math.abs(hole.yardage - 394) <= 3, `yardage ${hole.yardage}`);
-  // tee end first (near origin), green end negative z
-  assert.ok(Math.hypot(...hole.centerline[0]) < 5);
-  assert.ok(hole.greenCenter[1] < -300);
-  // green ~360 m north, +3.6 m → +12 ft
+  assert.ok(haversineMeters(hole.centerline[0], [-87.72, 43.85]) < 5); // tee end first
+  assert.ok(hole.greenCenter[1] > 43.852);
   assert.ok(Math.abs(hole.elevationChangeFt - 12) <= 1, `elev ${hole.elevationChangeFt}`);
-  assert.ok(hole.bunkerRings.length === 1);
+  assert.equal(hole.bunkerRings.length, 1);
 });
 
-test('haversine sanity', () => {
-  assert.ok(Math.abs(haversineMeters([-87.72, 43.85], [-87.72, 43.853234]) - 360) < 3);
+test('holeToGeoJSON produces valid closed polygons + linestring', () => {
+  const parsed = filterToCourse(parseOverpass(fixture), 'Whistling Straits');
+  const hole = assembleHole(parsed, '1', null);
+  const geo = holeToGeoJSON(hole);
+  assert.equal(geo.centerline.features[0].geometry.type, 'LineString');
+  const g = geo.greens.features[0].geometry.coordinates[0];
+  assert.deepEqual(g[0], g[g.length - 1]); // ring closed
+  assert.equal(geo.pin.features[0].geometry.type, 'Point');
 });

@@ -11,10 +11,10 @@
     "bake": "node scripts/bake-hole.mjs",
     "test": "node --test 'test/*.test.mjs'"
   },
-  "dependencies": {
-    "three": "^0.160.0"
-  },
   "devDependencies": {
     "vite": "^5.4.0"
+  },
+  "dependencies": {
+    "maplibre-gl": "^4.7.1"
   }
 }

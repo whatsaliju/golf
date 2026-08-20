@@ -24,8 +24,11 @@
   *{box-sizing:border-box;}
   html,body{margin:0;height:100%;overflow:hidden;background:#000;
     font-family:'Inter',system-ui,sans-serif;color:var(--ink);}
-  #canvas-wrap{position:absolute;inset:0;}
+  #map{position:absolute;inset:0;background:#0b1512;}
   canvas{display:block;}
+  /* keep MapLibre's default controls unobtrusive under the HUD */
+  .maplibregl-ctrl-attrib{font-size:10px;}
+  .maplibregl-ctrl-bottom-right{z-index:5;}
 
   .hud{position:absolute;pointer-events:none;}
   .hud-top{top:0;left:0;right:0;padding:22px 28px;display:flex;justify-content:space-between;
@@ -79,7 +82,7 @@
 </head>
 <body>
 
-<div id="canvas-wrap"></div>
+<div id="map"></div>
 
 <div class="hud hud-top">
   <div>

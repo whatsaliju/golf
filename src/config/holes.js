@@ -15,8 +15,10 @@ export const COURSES = {
     // Bounding box around the Straits course (Lake Michigan shoreline).
     // Widen/tighten if OSM features fall outside it.
     bbox: { west: -87.74, south: 43.835, east: -87.70, north: 43.875 },
-    imagerySource: 'esri', // 'esri' (tokenless) | 'mapbox' (needs VITE_MAPBOX_TOKEN)
-    demSource: '3dep', // US → USGS 3DEP (via Terrarium in-browser; raw 3DEP in bake CLI)
+    // 'usgs' = USGS/NAIP public-domain imagery (FOSS default, no token)
+    // 'esri' = Esri World Imagery (free-to-use, proprietary) — higher max zoom
+    // 'mapbox' = Mapbox Satellite (needs VITE_MAPBOX_TOKEN)
+    imagerySource: 'usgs',
   },
 };
 

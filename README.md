@@ -1,19 +1,37 @@
-# Golf Hole Flyover — real data
+# Golf Hole Flyover — real data (MapLibre GL JS)
 
-A Three.js cinematic hole flyover, rebuilt on a **real data layer**:
+A cinematic golf-hole flyover built on a **100% free & open-source** data + rendering
+stack. No API keys, no accounts, no paid tiers required.
 
-- **Hole geometry** from OpenStreetMap (`golf=hole` / `tee` / `fairway` / `green` /
-  `bunker` / `water_hazard`) via the **Overpass API**, projected to local metres.
-- **Terrain** from a real **DEM** (USGS 3DEP over the US, delivered in-browser as
-  tokenless Terrarium terrain-RGB tiles; raw 3DEP GeoTIFF available in the bake CLI).
-- **Satellite drape** from **Esri World Imagery** (tokenless) — or Mapbox Satellite
-  if you supply a token.
-- **Yardage** and **elevation change** are *computed from the geometry + DEM*, not
-  hardcoded. The camera choreography (Catmull-Rom spline, ease-in-out altitude
-  descent, orbit-around-green finish) and the telemetry HUD are preserved from the
-  original demo.
+- **Engine:** [MapLibre GL JS](https://maplibre.org/) (BSD-3, FOSS) — real 3D terrain
+  + satellite draping, driven by the FreeCamera API for the flight.
+- **Hole geometry:** OpenStreetMap (`golf=hole` / `tee` / `fairway` / `green` /
+  `bunker` / `water_hazard`) via the **Overpass API** (ODbL open data).
+- **Terrain:** AWS **Terrain Tiles** (Terrarium terrain-RGB, open data; US relief is
+  USGS **3DEP**-sourced), used as a MapLibre `raster-dem` source with hillshade.
+- **Satellite:** **USGS Imagery / NAIP** — **public domain**, no token
+  (`basemap.nationalmap.gov`). Esri World Imagery and Mapbox are optional fallbacks.
+- **Yardage** and **elevation change** are computed from the real geometry +
+  terrain (`queryTerrainElevation`), not hardcoded. The camera choreography
+  (Catmull-Rom spline, ease-in-out descent, orbit-around-green) and the telemetry
+  HUD are carried over from the original demo.
 
 First hole wired: **Whistling Straits — The Straits, Hole 1** (Haven, WI).
+
+## Is any of it paid?
+
+No. Everything above is free. One nuance on *open*:
+
+| Layer | Source | Cost | Open? |
+|---|---|---|---|
+| Geometry | OpenStreetMap / Overpass | Free | ✅ ODbL |
+| Terrain | AWS Terrain Tiles / USGS 3DEP | Free | ✅ Open / public domain |
+| Satellite (default) | **USGS / NAIP** | Free | ✅ Public domain |
+| Satellite (option) | Esri World Imagery | Free | ⚠️ Free-to-use, proprietary |
+| Satellite (option) | Mapbox Satellite | Free tier | ❌ Proprietary, needs token |
+
+The default (`imagerySource: 'usgs'`) is fully public-domain. Switch per course in
+`src/config/holes.js`.
 
 ## Run
 
@@ -22,22 +40,22 @@ npm install
 npm run dev        # open the printed localhost URL
 ```
 
-`npm run dev` fetches everything live in your browser. The Vite dev server
-reverse-proxies the data hosts (see `vite.config.js`) so CORS never bites.
+Everything is fetched live in the browser (all sources are CORS-enabled; no proxy
+needed). Drag to orbit, scroll to zoom, right-drag to rotate/pitch. After the
+flyover finishes the camera is released for free exploration.
 
 ```bash
 npm run build && npm run preview   # production build
-npm test                           # offline unit tests (projection, tiles, parsing, metrics)
+npm test                           # offline unit tests
 ```
 
-> **No Mapbox account needed.** Defaults are Esri imagery + 3DEP/Terrarium
-> elevation, both tokenless. To use Mapbox instead, copy `.env.example` to `.env`,
-> set `VITE_MAPBOX_TOKEN`, and set `imagerySource: 'mapbox'` for the course in
-> `src/config/holes.js`.
+> Note: the imagery for the very close ground shots comes from USGS/NAIP, which caps
+> around zoom 16 (~2.4 m/px). For sharper close-ups set `imagerySource: 'esri'`
+> (zoom ~19) — free to use, but proprietary rather than open.
 
 ## Adding holes (toward a full 18)
 
-Everything is driven by `src/config/holes.js`:
+Driven entirely by `src/config/holes.js`:
 
 ```js
 export const HOLES = [
@@ -47,59 +65,49 @@ export const HOLES = [
 ];
 ```
 
-`ref` is the OSM `golf=hole` reference. The **"Hole ▸"** button cycles the array;
-the same order is your 18-hole reel. Add a new course by adding an entry to
-`COURSES` (name filter + bbox + region).
+`ref` is the OSM `golf=hole` reference. The **"Hole ▸"** button cycles the array —
+the same order is your 18-hole reel. Add a new course by adding a `COURSES` entry
+(name filter + bbox + imagery source).
 
-## Baking (fast, offline, reproducible)
+## Baking (optional — skip the Overpass round-trip)
 
-Live fetching is convenient but hits the network each load. To freeze a hole into
-static assets, run the bake CLI **on a machine with open network egress**:
+MapLibre streams terrain + imagery itself, so baking only freezes the OSM geometry
+and computed metrics. Run on a machine with open egress:
 
 ```bash
-npm i -D sharp                 # one-time, used only by the bake step
+npm i -D sharp                 # optional: enables baked elevation change
 npm run bake -- --hole ws-1
 ```
 
-This writes `public/holes/ws-1.json` (geometry + yardage + elevation change +
-height grid) and `public/holes/ws-1/sat.png` (stitched imagery). The runtime
-prefers baked assets when present (`loadHole` → baked → live → placeholder), so a
-baked hole loads instantly with no API calls. Bake all 18 for a distributable reel.
+Writes `public/holes/ws-1.json`. The runtime prefers it when present
+(`loadHole` → baked → live → placeholder).
 
 ## Architecture
 
 ```
 src/
-  config/holes.js      COURSES + HOLES[] registry
+  config/holes.js        COURSES + HOLES[] registry
   data/
-    endpoints.js       URL resolver (dev proxy vs direct)
-    tiles.js           Web-Mercator tile math + Terrarium decode (pure)
-    projection.js      equirectangular lat/lon ↔ local metres (pure)
-    overpass.js        query builder + fetch + classify/project parser (pure parse)
-    holeModel.js       assemble centerline, compute yardage + elevationChangeFt (pure)
-    elevation.js       Terrarium DEM → bilinear height sampler (browser)
-    imagery.js         Esri/Mapbox tiles → draped THREE texture + UV mapper (browser)
-    loadHole.js        orchestrator: baked → live → placeholder
+    endpoints.js         source URLs (imagery / terrain / overpass)
+    geo.js               haversine, centroid, point-in-ring, Catmull-Rom (pure)
+    tiles.js             Web-Mercator tile math + Terrarium decode (pure, baker)
+    overpass.js          query + fetch + classify parser → lng/lat (pure parse)
+    holeModel.js         centerline, real yardage, elevation change (pure)
+    holeGeoJSON.js       hole model → MapLibre GeoJSON sources
+    loadHole.js          orchestrator: baked → live → placeholder
   scene/
-    world.js           terrain mesh from DEM + imagery + OSM feature overlays
-    flight.js          Catmull-Rom flight, ease-in-out descent, green orbit (preserved)
-    hud.js             telemetry wiring
-  main.js              bootstrap + render loop + controls
-scripts/bake-hole.mjs  local Node baker (sharp)
-test/                  offline unit tests
+    flyover.js           FreeCamera Catmull-Rom flight + green orbit
+    hud.js               telemetry wiring
+  main.js                MapLibre map (terrain + sky + imagery + overlays) + controls
+scripts/bake-hole.mjs    optional local baker (sharp)
+test/                    offline unit tests
+reference/               original single-file mock demo, for provenance
 ```
 
-Data-source URLs and the dev proxy paths live together in `src/data/endpoints.js`
-and `vite.config.js` — change them in those two places to swap providers.
+## Why MapLibre (vs Three.js / Cesium)
 
-## Notes on data quality
-
-- OSM golf coverage varies. If a hole looks off, check that the course's `bbox`
-  in `COURSES` fully contains it and that OSM actually tags that hole
-  (`golf=hole ref=N`). When a hole line is missing, the model synthesises a
-  centerline from the ref-tagged tee and green.
-- Terrarium's US elevation is resampled from USGS 3DEP; for survey-grade 3DEP
-  precision, extend `scripts/bake-hole.mjs` with the 3DEP `exportImage` GeoTIFF
-  endpoint (`elevation.nationalmap.gov/.../3DEPElevation/ImageServer`).
-- If live fetching fails entirely, the app renders a clearly-labelled procedural
-  **placeholder** so it never blank-screens.
+MapLibre gives accurate geo terrain + imagery draping and a cinematic camera out of
+the box, is fully FOSS (BSD-3), and needs no token. Cesium (Apache-2.0) is the other
+strong FOSS option for globe-accurate 3D; Three.js gives the most bespoke art control
+but you hand-build the geospatial plumbing. This project uses MapLibre for the best
+realism-per-effort while staying free and open.

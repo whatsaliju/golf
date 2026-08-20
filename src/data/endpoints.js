@@ -1,42 +1,45 @@
-// Resolves data-source URLs. In the Vite browser dev server we route through
-// the `/__geo/*` reverse proxies (see vite.config.js) so every request is
-// same-origin and CORS can never bite. In a production build or in Node (the
-// bake CLI), we hit the upstream hosts directly — they all send permissive
-// CORS headers except 3DEP, which the bake CLI reaches from Node (no CORS).
+// Data-source endpoints. MapLibre fetches raster/raster-dem tiles directly in
+// the browser; all hosts below send permissive CORS, so no dev proxy is needed.
+// Everything here is free and (except the optional Esri/Mapbox fallbacks)
+// public-domain / open data.
 
 const viteEnv = typeof import.meta !== 'undefined' ? import.meta.env : undefined;
-const USE_PROXY = !!(viteEnv && viteEnv.DEV);
 
-const DIRECT = {
-  overpass: 'https://overpass-api.de/api/interpreter',
-  dep3: 'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer/exportImage',
-  esri: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile',
-  terrarium: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium',
+export const overpassUrl = () => 'https://overpass-api.de/api/interpreter';
+
+export const mapboxToken = () => (viteEnv && viteEnv.VITE_MAPBOX_TOKEN) || undefined;
+
+// Terrarium terrain-RGB (AWS Open Data). US data is USGS 3DEP-derived.
+export const TERRARIUM = {
+  tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+  encoding: 'terrarium',
+  tileSize: 256,
+  maxzoom: 15,
+  attribution: 'Elevation: AWS Terrain Tiles / USGS 3DEP',
 };
 
-const PROXY = {
-  overpass: '/__geo/overpass',
-  dep3: '/__geo/3dep',
-  esri: '/__geo/esri',
-  terrarium: '/__geo/terrarium',
-};
-
-const base = USE_PROXY ? PROXY : DIRECT;
-
-export const overpassUrl = () => base.overpass;
-export const dep3ExportUrl = () => base.dep3;
-
-/** Esri World Imagery uses z/y/x ordering. */
-export const esriTileUrl = (z, x, y) => `${base.esri}/${z}/${y}/${x}`;
-
-/** AWS Terrarium terrain-RGB, z/x/y ordering, .png. */
-export const terrariumTileUrl = (z, x, y) => `${base.terrarium}/${z}/${x}/${y}.png`;
-
-/** Mapbox is optional and always hit directly (it is CORS-friendly). */
-export const mapboxSatelliteUrl = (z, x, y, token) =>
-  `https://api.mapbox.com/v4/mapbox.satellite/${z}/${x}/${y}@2x.jpg?access_token=${token}`;
-export const mapboxTerrainRgbUrl = (z, x, y, token) =>
-  `https://api.mapbox.com/v4/mapbox.terrain-rgb/${z}/${x}/${y}.pngraw?access_token=${token}`;
-
-export const mapboxToken = () =>
-  (viteEnv && viteEnv.VITE_MAPBOX_TOKEN) || undefined;
+/**
+ * Imagery raster sources by name.
+ *  - 'usgs'  : USGS Imagery (NAIP-sourced), PUBLIC DOMAIN, no token  ← FOSS default
+ *  - 'esri'  : Esri World Imagery, free-to-use w/ attribution (proprietary)
+ *  - 'mapbox': Mapbox Satellite, needs VITE_MAPBOX_TOKEN (proprietary)
+ */
+export function imagerySource(name) {
+  if (name === 'mapbox' && mapboxToken()) {
+    return {
+      tiles: [`https://api.mapbox.com/v4/mapbox.satellite/{z}/{x}/{y}@2x.jpg?access_token=${mapboxToken()}`],
+      tileSize: 512, maxzoom: 22, attribution: '© Mapbox © Maxar',
+    };
+  }
+  if (name === 'esri') {
+    return {
+      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+      tileSize: 256, maxzoom: 19, attribution: 'Imagery: Esri, Maxar, Earthstar Geographics',
+    };
+  }
+  // default: USGS / NAIP — public domain
+  return {
+    tiles: ['https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryOnly/MapServer/tile/{z}/{y}/{x}'],
+    tileSize: 256, maxzoom: 16, attribution: 'Imagery: USGS / NAIP (public domain)',
+  };
+}

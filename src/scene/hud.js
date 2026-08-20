@@ -4,7 +4,7 @@
 const $ = (id) => document.getElementById(id);
 
 const BADGE = {
-  live: { text: 'LIVE · OSM + DEM + IMAGERY', cls: '' },
+  live: { text: 'LIVE · OSM + 3DEP + NAIP', cls: '' },
   baked: { text: 'BAKED · REAL DATA', cls: '' },
   placeholder: { text: 'PLACEHOLDER · LIVE FETCH FAILED', cls: 'err' },
 };
