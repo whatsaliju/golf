@@ -32,6 +32,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # Pre-fetch all hole data from Overpass ONCE at build time and bake it to
+      # static JSON, so the deployed site makes zero live Overpass calls. Non-
+      # fatal: if Overpass is down now, the site just fetches live at runtime.
+      - run: npm run bake:all
+        continue-on-error: true
       # Relative base ("./") so one build works at any path: the bare
       # *.github.io/<repo>/ URL, a custom subdomain root (golf.lijuvarughese.com),
       # or a Bluehost /golf/ subfolder.
