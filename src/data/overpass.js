@@ -9,7 +9,7 @@ import { ringCenter, pointInRing } from './geo.js';
  * timeout (default 20s) so one slow/hung mirror can't stall the whole load; the
  * next mirror is tried on any failure. Rejects only if every mirror fails.
  */
-async function postOverpass(query, { fetchImpl = fetch, perTryMs = 20000, signal } = {}) {
+async function postOverpass(query, { fetchImpl = fetch, perTryMs = 35000, signal } = {}) {
   const body = new URLSearchParams({ data: query });
   let lastErr;
   for (const url of overpassEndpoints()) {
@@ -40,16 +40,21 @@ async function postOverpass(query, { fetchImpl = fetch, perTryMs = 20000, signal
   throw lastErr || new Error('All Overpass endpoints failed');
 }
 
-/** Overpass QL for every golf feature in a bbox, with inline geometry. */
+/**
+ * Overpass QL for the golf features in a bbox, with inline geometry.
+ * Deliberately scoped to golf=* + the course boundary — we do NOT pull
+ * natural=water here, because near a shoreline (e.g. Lake Michigan) that drags
+ * in enormous water polygons and makes the server 504. On-course water hazards
+ * are golf=water_hazard, already matched by ["golf"].
+ */
 export function buildQuery(bbox) {
   const b = `${bbox.south},${bbox.west},${bbox.north},${bbox.east}`;
-  return `[out:json][timeout:120];
+  return `[out:json][timeout:180];
 (
   way["leisure"="golf_course"](${b});
   relation["leisure"="golf_course"](${b});
   way["golf"](${b});
   relation["golf"](${b});
-  way["natural"="water"](${b});
 );
 out geom tags;`;
 }
