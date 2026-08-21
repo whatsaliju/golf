@@ -9,6 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "bake": "node scripts/bake-hole.mjs",
+    "bake:all": "node scripts/bake-course.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {

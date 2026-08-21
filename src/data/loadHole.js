@@ -80,10 +80,16 @@ export async function loadHole(resolved, onProgress) {
     const baked = await loadBaked(resolved);
     if (baked) return baked;
   } catch (e) { console.warn('baked load failed:', e); }
-  try {
-    return await loadLive(resolved, onProgress);
-  } catch (e) {
+
+  // Live path, but with a hard wall-clock guarantee: whatever happens (slow
+  // Overpass, a network that blocks it, a browser that ignores an abort), the
+  // promise resolves to *something* within the deadline so the UI never hangs.
+  const live = loadLive(resolved, onProgress).catch((e) => {
     console.error('live load failed, using placeholder:', e);
     return loadPlaceholder(resolved, e.message);
-  }
+  });
+  const guard = new Promise((res) =>
+    setTimeout(() => res(loadPlaceholder(resolved, 'OpenStreetMap did not respond in time')), 28000)
+  );
+  return Promise.race([live, guard]);
 }

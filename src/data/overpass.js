@@ -1,8 +1,37 @@
 // Overpass API: query builder, fetch, and a pure parser that classifies golf
 // features by their `golf=*` tag and keeps geometry in lng/lat for MapLibre.
 
-import { overpassUrl } from './endpoints.js';
+import { overpassEndpoints } from './endpoints.js';
 import { ringCenter, pointInRing } from './geo.js';
+
+/**
+ * POST an Overpass query, trying each mirror in turn. Each attempt gets its own
+ * timeout (default 20s) so one slow/hung mirror can't stall the whole load; the
+ * next mirror is tried on any failure. Rejects only if every mirror fails.
+ */
+async function postOverpass(query, { fetchImpl = fetch, perTryMs = 20000, signal } = {}) {
+  const body = new URLSearchParams({ data: query });
+  let lastErr;
+  for (const url of overpassEndpoints()) {
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), perTryMs) : null;
+    if (signal && ctrl) signal.addEventListener('abort', () => ctrl.abort(), { once: true });
+    try {
+      const res = await fetchImpl(url, {
+        method: 'POST', body, signal: ctrl ? ctrl.signal : signal,
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      });
+      if (!res.ok) throw new Error(`Overpass ${res.status} ${res.statusText}`);
+      return await res.json();
+    } catch (e) {
+      lastErr = e;
+      if (signal && signal.aborted) break; // caller gave up entirely
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+  throw lastErr || new Error('All Overpass endpoints failed');
+}
 
 /** Overpass QL for every golf feature in a bbox, with inline geometry. */
 export function buildQuery(bbox) {
@@ -18,14 +47,8 @@ export function buildQuery(bbox) {
 out geom tags;`;
 }
 
-export async function fetchOverpass(bbox, { fetchImpl = fetch, signal } = {}) {
-  const body = new URLSearchParams({ data: buildQuery(bbox) });
-  const res = await fetchImpl(overpassUrl(), {
-    method: 'POST', body, signal,
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  });
-  if (!res.ok) throw new Error(`Overpass ${res.status} ${res.statusText}`);
-  return res.json();
+export async function fetchOverpass(bbox, opts = {}) {
+  return postOverpass(buildQuery(bbox), opts);
 }
 
 /** Context features (buildings, tree cover) for 3D realism, in a bbox. */
@@ -42,14 +65,8 @@ export function buildContextQuery(bbox) {
 out geom tags;`;
 }
 
-export async function fetchContext(bbox, { fetchImpl = fetch, signal } = {}) {
-  const body = new URLSearchParams({ data: buildContextQuery(bbox) });
-  const res = await fetchImpl(overpassUrl(), {
-    method: 'POST', body, signal,
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  });
-  if (!res.ok) throw new Error(`Overpass ${res.status} ${res.statusText}`);
-  return res.json();
+export async function fetchContext(bbox, opts = {}) {
+  return postOverpass(buildContextQuery(bbox), opts);
 }
 
 const num = (v) => (v == null || v === '' ? undefined : Number(v));

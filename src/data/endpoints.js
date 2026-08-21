@@ -5,7 +5,14 @@
 
 const viteEnv = typeof import.meta !== 'undefined' ? import.meta.env : undefined;
 
-export const overpassUrl = () => 'https://overpass-api.de/api/interpreter';
+// Multiple Overpass endpoints; fetchOverpass tries them in order so one slow or
+// down mirror doesn't block a load.
+export const overpassEndpoints = () => [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://lz4.overpass-api.de/api/interpreter',
+];
+export const overpassUrl = () => overpassEndpoints()[0];
 
 export const mapboxToken = () => (viteEnv && viteEnv.VITE_MAPBOX_TOKEN) || undefined;
 
