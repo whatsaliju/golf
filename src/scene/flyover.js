@@ -58,16 +58,22 @@ export function createFlyover(map, hud) {
   let onDone = null;
 
   const groundAt = (lngLat) => {
-    const e = map.queryTerrainElevation(lngLat, { exaggerated: false });
-    return Number.isFinite(e) ? e : 0;
+    // queryTerrainElevation can throw or return null before the DEM has loaded;
+    // treat anything non-finite as sea level so the flight never stalls.
+    try {
+      const e = map.queryTerrainElevation(lngLat, { exaggerated: false });
+      return Number.isFinite(e) ? e : 0;
+    } catch { return 0; }
   };
 
   function apply(frame) {
-    const cam = map.getFreeCameraOptions();
-    const alt = groundAt(frame.cam) + frame.agl;
-    cam.position = MercatorCoordinate.fromLngLat(frame.cam, alt);
-    cam.lookAtPoint(frame.target);
-    map.setFreeCameraOptions(cam);
+    try {
+      const cam = map.getFreeCameraOptions();
+      const alt = groundAt(frame.cam) + frame.agl;
+      cam.position = MercatorCoordinate.fromLngLat(frame.cam, alt);
+      cam.lookAtPoint(frame.target);
+      map.setFreeCameraOptions(cam);
+    } catch { /* transient (map not ready this frame); next frame retries */ }
   }
 
   function tick(ts) {
