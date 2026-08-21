@@ -32,10 +32,12 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      # Base path = "/<repo>/" for a project Pages site.
+      # Relative base ("./") so one build works at any path: the bare
+      # *.github.io/<repo>/ URL, a custom subdomain root (golf.lijuvarughese.com),
+      # or a Bluehost /golf/ subfolder.
       - run: npm run build
         env:
-          VITE_BASE: /${{ github.event.repository.name }}/
+          VITE_BASE: ./
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

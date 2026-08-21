@@ -146,13 +146,33 @@ async function present(i) {
     zoom: 15.4, pitch: 68, bearing: b,
   });
 
-  // wait for terrain tiles before sampling elevation / starting the flight
-  map.once('idle', () => {
+  // 3D context (buildings/trees) loads in the background and is dropped in when
+  // ready — it never blocks the reveal.
+  if (data.loadContext) {
+    data.loadContext().then((ctx) => {
+      if (!ctx || data !== current) return; // ignore if the user switched holes
+      for (const [srcId, key] of [['buildings', 'buildings'], ['canopy', 'canopy'], ['ctxTrees', 'trees']]) {
+        const s = map.getSource(srcId);
+        if (s) s.setData(ctx[key]);
+      }
+    });
+  }
+
+  // Reveal on terrain 'idle', with a hard fallback so the overlay never hangs
+  // (slow tiles / Overpass shouldn't leave the user staring at a spinner).
+  let revealed = false;
+  const reveal = () => {
+    if (revealed || data !== current) return;
+    revealed = true;
     fillElevation(data);
     flyover.load(data.hole);
-    if (data.meta.source === 'placeholder') { showStatus('Live fetch failed — placeholder hole on real terrain', data.meta.reason || ''); setTimeout(hideStatus, 2800); }
-    else hideStatus();
-  });
+    if (data.meta.source === 'placeholder') {
+      showStatus('Live fetch failed — placeholder hole on real terrain', data.meta.reason || '');
+      setTimeout(hideStatus, 2800);
+    } else hideStatus();
+  };
+  map.once('idle', reveal);
+  setTimeout(reveal, 7000);
 }
 
 // ---- controls ---------------------------------------------------------------
