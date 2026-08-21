@@ -56,6 +56,8 @@ function buildFrames(hole, opts) {
 export function createFlyover(map, hud) {
   let frames = [], hole = null, idx = 0, playing = false, speed = 1, raf = null, last = 0;
   let onDone = null;
+  let holdUntil = 0;
+  const PACE = 0.62; // <1 slows the flight so it reads as a cinematic flyover
 
   const groundAt = (lngLat) => {
     // queryTerrainElevation can throw or return null before the DEM has loaded;
@@ -81,7 +83,8 @@ export function createFlyover(map, hud) {
     if (!frames.length) return;
     const dt = last ? (ts - last) / 16.67 : 1; last = ts;
     if (!playing) return; // idle → let the user pan/orbit freely after the flight
-    idx += speed * dt;
+    if (ts < holdUntil) { apply(frames[Math.floor(idx)]); return; } // opening hold
+    idx += speed * dt * PACE;
     let finished = false;
     if (idx >= frames.length - 1) { idx = frames.length - 1; playing = false; finished = true; }
     const frame = frames[Math.floor(idx)];
@@ -96,10 +99,11 @@ export function createFlyover(map, hud) {
       hole = h;
       frames = buildFrames(h, opts);
       idx = 0; playing = true; last = 0;
+      holdUntil = performance.now() + (opts.holdMs ?? 1000); // hold the opening shot
       apply(frames[0]);
       if (!raf) raf = requestAnimationFrame(tick);
     },
-    replay(done) { idx = 0; playing = true; onDone = done || null; },
+    replay(done) { idx = 0; playing = true; last = 0; holdUntil = performance.now() + 500; onDone = done || null; },
     setSpeed(s) { speed = s; },
     isReady: () => frames.length > 0,
   };
