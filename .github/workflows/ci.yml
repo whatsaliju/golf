@@ -1,0 +1,29 @@
+name: CI
+
+# Runs on every PR: unit tests, a real Overpass bake (to catch fetch/406/bbox
+# regressions before they reach a deploy), and a production build. Does NOT
+# deploy — that's the Pages workflow on push to main.
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run bake:all
+      - name: Assert holes were baked
+        run: |
+          count=$(ls public/holes/*.json 2>/dev/null | wc -l)
+          echo "Baked $count hole JSON file(s)"
+          test "$count" -ge 1
+      - run: npm run build
+        env:
+          VITE_BASE: ./
