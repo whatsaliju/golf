@@ -164,12 +164,15 @@ async function present(i) {
   const reveal = () => {
     if (revealed || data !== current) return;
     revealed = true;
-    fillElevation(data);
-    flyover.load(data.hole);
+    // Hide the overlay FIRST — nothing below is allowed to keep the user on the
+    // spinner. Elevation sampling and the camera can throw before terrain tiles
+    // are ready; those are best-effort, never blockers.
     if (data.meta.source === 'placeholder') {
       showStatus('Live fetch failed — placeholder hole on real terrain', data.meta.reason || '');
       setTimeout(hideStatus, 2800);
     } else hideStatus();
+    try { fillElevation(data); } catch (e) { console.warn('elevation:', e); }
+    try { flyover.load(data.hole); } catch (e) { console.warn('flyover:', e); }
   };
   map.once('idle', reveal);
   setTimeout(reveal, 7000);
@@ -225,7 +228,16 @@ recBtn.onclick = () => {
 };
 
 // ---- go ---------------------------------------------------------------------
-map.on('load', () => {
+// Boot as soon as the style is parsed — NOT gated on `load`. MapLibre's `load`
+// event only fires once the tile sources have loaded, so if a tile host is slow
+// or blocked (the DEM source needs CORS), `load` never fires and the app would
+// hang forever on the loading spinner. Adding GeoJSON sources/layers and running
+// the flyover only needs the style parsed; imagery/terrain fill in as they load.
+let booted = false;
+function boot() {
+  if (booted) return;
+  booted = true;
+
   try { map.setTerrain({ source: 'dem', exaggeration: 1.0 }); } catch (e) { console.warn('terrain:', e); }
   try {
     map.setSky({
@@ -233,10 +245,8 @@ map.on('load', () => {
       'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.4, 'atmosphere-blend': 0.7,
     });
   } catch (e) { console.warn('sky:', e); }
-  // warm low sun so the 3D extrusions + terrain read with depth
   try { map.setLight({ anchor: 'map', color: '#fff2df', intensity: 0.55, position: [1.4, 210, 30] }); } catch (e) { console.warn('light:', e); }
 
-  // subtle animated shimmer on water hazards
   const shimmer = () => {
     if (map.getLayer('water-fill')) {
       map.setPaintProperty('water-fill', 'fill-opacity', 0.42 + Math.sin(performance.now() / 900) * 0.06);
@@ -246,4 +256,12 @@ map.on('load', () => {
   requestAnimationFrame(shimmer);
 
   present(0).catch((err) => { console.error(err); showStatus('Failed to initialise', String(err && err.message)); });
-});
+}
+
+// Trigger boot from whichever fires first: the normal `load`, the earlier
+// `styledata` (style parsed — sources can be added even before tiles finish),
+// or a hard timeout so nothing can leave the user staring at a spinner.
+if (map.isStyleLoaded()) boot();
+map.on('load', boot);
+map.on('styledata', boot);
+setTimeout(boot, 3500);
