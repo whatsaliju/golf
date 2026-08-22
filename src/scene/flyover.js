@@ -1,54 +1,59 @@
-// Cinematic flyover via MapLibre's FreeCamera API — the same choreography as the
-// original demo (Catmull-Rom down the hole, ease-in-out altitude descent,
-// orbit-around-green finish), now over real 3D terrain.
+// Cinematic flyover driven by map.jumpTo() per frame — a Catmull-Rom glide down
+// the hole (looking ahead) that eases in closer, then an orbit around the green.
+//
+// This deliberately does NOT use MapLibre's FreeCamera API: FreeCamera +
+// setTerrain is fragile (setFreeCameraOptions can throw once 3D terrain is on),
+// which froze the camera while the flight timer kept running. jumpTo() with
+// center/bearing/pitch/zoom is rock-solid with terrain and gives the same
+// chase-cam-down-the-fairway look.
 
-import { MercatorCoordinate } from 'maplibre-gl';
-import { densify, catmullRom, haversineMeters } from '../data/geo.js';
+import { densify, catmullRom, bearing as bearingOf } from '../data/geo.js';
 
 const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-
-// metres → degrees offset near a latitude
-const offsetDeg = (lngLat, east, north) => {
-  const dLat = north / 111320;
-  const dLon = east / (111320 * Math.cos((lngLat[1] * Math.PI) / 180) || 1);
-  return [lngLat[0] + dLon, lngLat[1] + dLat];
-};
+const lerp = (a, b, t) => a + (b - a) * t;
 
 function buildFrames(hole, opts) {
-  const line = densify(hole.centerline, opts.flightSamples ?? 260);
-  const lengthM = hole.yardage * 0.9144;
-  const startAGL = clamp(lengthM * 0.16, 55, 150);
-  const endAGL = 26;
-  const frames = [];
+  const centerline = hole.centerline;
+  const N = opts.flightSamples ?? 240;
+  const lengthM = (hole.yardage || 400) * 0.9144;
 
-  for (let i = 0; i < line.length; i++) {
-    const t = i / (line.length - 1);
-    const camT = Math.min(t * 1.12, 1);
-    const p = catmullRom(hole.centerline, camT);
-    const ahead = catmullRom(hole.centerline, Math.min(camT + 0.05, 1));
-    // tangent (metres) for behind/lateral offsets
-    const mLon = 111320 * Math.cos((p[1] * Math.PI) / 180);
-    let tx = (ahead[0] - p[0]) * mLon, ty = (ahead[1] - p[1]) * 111320;
-    const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
-    const lateral = Math.sin(t * Math.PI * 0.6) * 12;
-    const behind = 16 * (1 - t) + 6;
-    const east = -tx * behind + -ty * lateral;
-    const north = -ty * behind + tx * lateral;
+  // Wider (lower zoom) opening for longer holes so the whole hole is in frame.
+  const startZoom = clamp(16.4 - Math.log2(Math.max(lengthM, 120) / 90), 14.2, 15.6);
+  const endZoom = startZoom + 1.4;
+  const startPitch = 58, endPitch = 67;
+  const startAGL = clamp(lengthM * 0.16, 55, 150), endAGL = 26; // HUD readout only
+
+  const frames = [];
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    const e = easeInOut(t);
+    const camT = Math.min(t * 1.08, 1);
+    const p = catmullRom(centerline, camT);
+    const ahead = catmullRom(centerline, Math.min(camT + 0.05, 1));
+    // Center slightly ahead so we look down the hole; bearing = travel direction.
+    const center = catmullRom(centerline, Math.min(camT + 0.03, 1));
     frames.push({
-      cam: offsetDeg(p, east, north),
-      target: ahead,
-      agl: clamp(startAGL + (endAGL - startAGL) * easeInOut(Math.min(t * 1.05, 1)), endAGL, startAGL),
+      center,
+      bearing: bearingOf(p, ahead),
+      pitch: lerp(startPitch, endPitch, e),
+      zoom: lerp(startZoom, endZoom, e),
+      agl: lerp(startAGL, endAGL, e),
     });
   }
 
-  // orbit around the green
+  // Orbit the green: hold center on the pin and sweep the bearing around it.
   const gc = hole.greenCenter;
-  const orbit = opts.orbitSamples ?? 110;
-  const r = 55;
-  for (let i = 0; i <= orbit; i++) {
-    const a = (i / orbit) * Math.PI * 1.5;
-    frames.push({ cam: offsetDeg(gc, Math.cos(a) * r, Math.sin(a) * r * 0.7), target: gc, agl: 40 });
+  const orbit = opts.orbitSamples ?? 120;
+  const baseBearing = frames.length ? frames[frames.length - 1].bearing : 0;
+  for (let i = 1; i <= orbit; i++) {
+    frames.push({
+      center: gc,
+      bearing: baseBearing + (i / orbit) * 500,
+      pitch: 64,
+      zoom: endZoom,
+      agl: 40,
+    });
   }
   return frames;
 }
@@ -59,22 +64,9 @@ export function createFlyover(map, hud) {
   let holdUntil = 0;
   const PACE = 0.62; // <1 slows the flight so it reads as a cinematic flyover
 
-  const groundAt = (lngLat) => {
-    // queryTerrainElevation can throw or return null before the DEM has loaded;
-    // treat anything non-finite as sea level so the flight never stalls.
-    try {
-      const e = map.queryTerrainElevation(lngLat, { exaggerated: false });
-      return Number.isFinite(e) ? e : 0;
-    } catch { return 0; }
-  };
-
   function apply(frame) {
     try {
-      const cam = map.getFreeCameraOptions();
-      const alt = groundAt(frame.cam) + frame.agl;
-      cam.position = MercatorCoordinate.fromLngLat(frame.cam, alt);
-      cam.lookAtPoint(frame.target);
-      map.setFreeCameraOptions(cam);
+      map.jumpTo({ center: frame.center, bearing: frame.bearing, pitch: frame.pitch, zoom: frame.zoom });
     } catch { /* transient (map not ready this frame); next frame retries */ }
   }
 
