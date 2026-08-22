@@ -187,9 +187,9 @@ document.getElementById('speedBtn').onclick = (e) => {
   e.target.textContent = `Speed: ${speed}x`;
 };
 
-let relief = 1;
+let relief = 1.5; // default: dunes read without touching the button
 document.getElementById('reliefBtn').onclick = (e) => {
-  relief = relief === 1 ? 1.5 : relief === 1.5 ? 2 : 1;
+  relief = relief === 1.5 ? 2 : relief === 2 ? 1 : 1.5;
   try { map.setTerrain({ source: 'dem', exaggeration: relief }); } catch (err) { console.warn(err); }
   e.target.textContent = `Relief: ${relief}x`;
 };
@@ -238,7 +238,7 @@ function boot() {
   if (booted) return;
   booted = true;
 
-  try { map.setTerrain({ source: 'dem', exaggeration: 1.0 }); } catch (e) { console.warn('terrain:', e); }
+  try { map.setTerrain({ source: 'dem', exaggeration: relief }); } catch (e) { console.warn('terrain:', e); }
   try {
     map.setSky({
       'sky-color': '#0d2430', 'horizon-color': '#3d6b5c', 'fog-color': '#2b3f3a',

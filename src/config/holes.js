@@ -15,10 +15,11 @@ export const COURSES = {
     // Bounding box around the Straits course (Lake Michigan shoreline).
     // Widen/tighten if OSM features fall outside it.
     bbox: { west: -87.74, south: 43.835, east: -87.70, north: 43.875 },
-    // 'usgs' = USGS/NAIP public-domain imagery (FOSS default, no token)
-    // 'esri' = Esri World Imagery (free-to-use, proprietary) — higher max zoom
+    // 'esri' = Esri World Imagery (free-to-use, proprietary) — sharper close-ups
+    //          (zoom ~19 vs USGS ~16), better for the flyover's low passes
+    // 'usgs' = USGS/NAIP public-domain imagery (no token)
     // 'mapbox' = Mapbox Satellite (needs VITE_MAPBOX_TOKEN)
-    imagerySource: 'usgs',
+    imagerySource: 'esri',
   },
 };
 
