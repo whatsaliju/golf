@@ -13,7 +13,7 @@ const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 
-function buildFrames(hole, opts) {
+export function buildFrames(hole, opts = {}) {
   // Orient the play line so the flight always ENDS at the green, regardless of
   // how the OSM hole line happened to be stored (tee→green or green→tee).
   const cl = hole.centerline.slice();
@@ -25,11 +25,14 @@ function buildFrames(hole, opts) {
   const N = opts.flightSamples ?? 240;
   const lengthM = (hole.yardage || 400) * 0.9144;
 
-  // Frame most of the hole; zoom in only near the green. Kept a small range so
-  // it reads as flying down the fairway, not zooming in and out.
-  const zTravel = clamp(15.8 - Math.log2(Math.max(lengthM, 120) / 110), 14.4, 15.6);
-  const zGreen = zTravel + 1.2;
-  const startAGL = clamp(lengthM * 0.16, 55, 150), endAGL = 26; // HUD readout only
+  // A flyover should begin over the tee, not show the whole property. MapLibre's
+  // pitched camera gets much farther from its center as pitch increases, so the
+  // previous combination of zoom 17 and pitch 72 still put the eye hundreds of
+  // feet away. Keep the camera at a drone-scale zoom and use a moderate pitch so
+  // the ground fills the viewport throughout the trip.
+  const zTravel = clamp(19.35 - Math.log2(Math.max(lengthM, 180) / 360) * 0.08, 19.15, 19.45);
+  const zGreen = zTravel + 0.25;
+  const startAGL = clamp(lengthM * 0.055, 24, 38), endAGL = 14; // HUD readout only
 
   // Local travel direction (look down the hole); stable near the endpoints.
   const dirAt = (e) => bearingOf(catmullRom(cl, Math.max(e - 0.05, 0)), catmullRom(cl, Math.min(e + 0.05, 1)));
@@ -41,18 +44,14 @@ function buildFrames(hole, opts) {
     frames.push({
       center: catmullRom(cl, e), // sweeps tee → green along the play line
       bearing: dirAt(e),
-      pitch: 62,
-      zoom: lerp(zTravel, zGreen, e * e), // stay wide most of the way, close near green
+      pitch: lerp(48, 58, e),
+      zoom: lerp(zTravel, zGreen, e),
       agl: lerp(startAGL, endAGL, e),
     });
   }
 
-  // Gentle ~300° orbit around the green to finish.
-  const orbit = opts.orbitSamples ?? 150;
-  const base = frames[frames.length - 1].bearing;
-  for (let i = 1; i <= orbit; i++) {
-    frames.push({ center: green, bearing: base + (i / orbit) * 300, pitch: 60, zoom: zGreen, agl: 40 });
-  }
+  // Stop over the green. Rotating around a stationary center reads as a map
+  // spin, not flight, and made the camera appear to climb after the approach.
   return frames;
 }
 
