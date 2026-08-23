@@ -10,6 +10,7 @@ import {
 import { parseOverpass, filterToCourse, parseContext } from '../src/data/overpass.js';
 import { assembleHole } from '../src/data/holeModel.js';
 import { holeToGeoJSON, contextToGeoJSON } from '../src/data/holeGeoJSON.js';
+import { buildFrames } from '../src/scene/flyover.js';
 
 test('tile math round-trips', () => {
   const z = 14;
@@ -94,6 +95,26 @@ test('assembleHole computes real yardage, orientation and elevation', () => {
   assert.ok(hole.greenCenter[1] > 43.852);
   assert.ok(Math.abs(hole.elevationChangeFt - 12) <= 1, `elev ${hole.elevationChangeFt}`);
   assert.equal(hole.bunkerRings.length, 1);
+});
+
+test('flyover stays low, follows tee to green, and avoids a high spin', () => {
+  const green = [-87.72, greenLat];
+  const hole = {
+    yardage: 394,
+    // Deliberately reversed to exercise the OSM direction correction.
+    centerline: [green, [-87.7203, 43.8516], [-87.72, 43.85]],
+    greenCenter: green,
+  };
+  const frames = buildFrames(hole, { flightSamples: 40, orbitSamples: 10 });
+  const arrival = frames[40];
+  const finish = frames.at(-1);
+
+  assert.ok(haversineMeters(frames[0].center, [-87.72, 43.85]) < 2);
+  assert.ok(haversineMeters(arrival.center, green) < 2);
+  assert.ok(frames.every((frame) => frame.zoom >= 16.8), 'camera must stay close to the hole');
+  assert.ok(frames.every((frame) => frame.agl <= 68), 'HUD altitude must remain low');
+  assert.equal(finish.agl, arrival.agl, 'finish must not jump upward');
+  assert.ok(finish.bearing - arrival.bearing <= 65.01, 'finish reveal must not spin around the green');
 });
 
 test('parseContext + contextToGeoJSON classify buildings/canopy/trees', () => {

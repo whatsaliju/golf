@@ -13,7 +13,7 @@ const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 
-function buildFrames(hole, opts) {
+export function buildFrames(hole, opts = {}) {
   // Orient the play line so the flight always ENDS at the green, regardless of
   // how the OSM hole line happened to be stored (tee→green or green→tee).
   const cl = hole.centerline.slice();
@@ -25,11 +25,12 @@ function buildFrames(hole, opts) {
   const N = opts.flightSamples ?? 240;
   const lengthM = (hole.yardage || 400) * 0.9144;
 
-  // Frame most of the hole; zoom in only near the green. Kept a small range so
-  // it reads as flying down the fairway, not zooming in and out.
-  const zTravel = clamp(15.8 - Math.log2(Math.max(lengthM, 120) / 110), 14.4, 15.6);
-  const zGreen = zTravel + 1.2;
-  const startAGL = clamp(lengthM * 0.16, 55, 150), endAGL = 26; // HUD readout only
+  // Stay close enough to see individual golf features. The old 14.4 travel zoom
+  // framed almost the entire course and read like a satellite view rather than
+  // a flyover. A small zoom change now simulates a steady low-altitude chase.
+  const zTravel = clamp(17.15 - Math.log2(Math.max(lengthM, 180) / 360) * 0.18, 16.8, 17.35);
+  const zGreen = zTravel + 0.45;
+  const startAGL = clamp(lengthM * 0.1, 42, 68), endAGL = 24; // HUD readout only
 
   // Local travel direction (look down the hole); stable near the endpoints.
   const dirAt = (e) => bearingOf(catmullRom(cl, Math.max(e - 0.05, 0)), catmullRom(cl, Math.min(e + 0.05, 1)));
@@ -41,17 +42,18 @@ function buildFrames(hole, opts) {
     frames.push({
       center: catmullRom(cl, e), // sweeps tee → green along the play line
       bearing: dirAt(e),
-      pitch: 62,
-      zoom: lerp(zTravel, zGreen, e * e), // stay wide most of the way, close near green
+      pitch: lerp(72, 76, e),
+      zoom: lerp(zTravel, zGreen, e),
       agl: lerp(startAGL, endAGL, e),
     });
   }
 
-  // Gentle ~300° orbit around the green to finish.
-  const orbit = opts.orbitSamples ?? 150;
+  // Finish with a short reveal instead of spinning a full revolution. Keep the
+  // same altitude as the arrival so the HUD and camera do not jump upward.
+  const orbit = opts.orbitSamples ?? 45;
   const base = frames[frames.length - 1].bearing;
   for (let i = 1; i <= orbit; i++) {
-    frames.push({ center: green, bearing: base + (i / orbit) * 300, pitch: 60, zoom: zGreen, agl: 40 });
+    frames.push({ center: green, bearing: base + (i / orbit) * 65, pitch: 74, zoom: zGreen, agl: endAGL });
   }
   return frames;
 }
