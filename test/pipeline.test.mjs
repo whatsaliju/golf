@@ -98,7 +98,6 @@ test('assembleHole computes real yardage, orientation and elevation', () => {
 });
 
 test('flyover starts over the tee, stays at drone scale, and stops over the green', () => {
-test('flyover stays low, follows tee to green, and avoids a high spin', () => {
   const green = [-87.72, greenLat];
   const hole = {
     yardage: 394,
@@ -106,26 +105,16 @@ test('flyover stays low, follows tee to green, and avoids a high spin', () => {
     centerline: [green, [-87.7203, 43.8516], [-87.72, 43.85]],
     greenCenter: green,
   };
-  const frames = buildFrames(hole, { flightSamples: 40 });
+  const frames = buildFrames(hole, { flightSamples: 40, viewportHeight: 900 });
   const arrival = frames[40];
 
   assert.equal(frames.length, 41, 'there must be no stationary orbit appended to the flight');
   assert.ok(haversineMeters(frames[0].center, [-87.72, 43.85]) < 2);
   assert.ok(haversineMeters(arrival.center, green) < 2);
-  assert.ok(frames.every((frame) => frame.zoom >= 19.15), 'camera must stay at drone scale');
-  assert.ok(frames.every((frame) => frame.pitch >= 48 && frame.pitch <= 58));
-  assert.ok(frames.every((frame) => frame.agl <= 38), 'HUD altitude must remain low');
-  assert.equal(arrival.agl, 14, 'flight must finish low over the green');
-  const frames = buildFrames(hole, { flightSamples: 40, orbitSamples: 10 });
-  const arrival = frames[40];
-  const finish = frames.at(-1);
-
-  assert.ok(haversineMeters(frames[0].center, [-87.72, 43.85]) < 2);
-  assert.ok(haversineMeters(arrival.center, green) < 2);
-  assert.ok(frames.every((frame) => frame.zoom >= 16.8), 'camera must stay close to the hole');
-  assert.ok(frames.every((frame) => frame.agl <= 68), 'HUD altitude must remain low');
-  assert.equal(finish.agl, arrival.agl, 'finish must not jump upward');
-  assert.ok(finish.bearing - arrival.bearing <= 65.01, 'finish reveal must not spin around the green');
+  assert.ok(frames.every((frame) => frame.zoom > 22), 'zoom must produce the requested low AGL');
+  assert.ok(frames.every((frame) => frame.pitch >= 52 && frame.pitch <= 58));
+  assert.ok(frames.every((frame) => frame.agl <= 34), 'HUD altitude must remain low');
+  assert.equal(arrival.agl, 16, 'flight must finish low over the green');
 });
 
 test('parseContext + contextToGeoJSON classify buildings/canopy/trees', () => {

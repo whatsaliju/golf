@@ -12,6 +12,19 @@ import { catmullRom, bearing as bearingOf, haversineMeters } from '../data/geo.j
 const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
+const EARTH_CIRCUMFERENCE_M = 40075016.686;
+
+// MapLibre derives camera height from zoom, viewport height, latitude and pitch.
+// Inverting that relationship lets us request a real height above the terrain
+// instead of displaying an AGL number that has no connection to the camera.
+function zoomForAGL([, lat], aglFt, pitch, viewportHeight) {
+  const altitudeM = aglFt / 3.28084;
+  const cameraDistancePx = viewportHeight * 1.5; // MapLibre's default 36.87° FOV
+  const groundMetersPerWorldPixel = Math.cos((lat * Math.PI) / 180) * EARTH_CIRCUMFERENCE_M / 512;
+  return Math.log2(
+    Math.cos((pitch * Math.PI) / 180) * cameraDistancePx * groundMetersPerWorldPixel / altitudeM
+  );
+}
 
 export function buildFrames(hole, opts = {}) {
   // Orient the play line so the flight always ENDS at the green, regardless of
@@ -24,21 +37,8 @@ export function buildFrames(hole, opts = {}) {
 
   const N = opts.flightSamples ?? 240;
   const lengthM = (hole.yardage || 400) * 0.9144;
-
-  // A flyover should begin over the tee, not show the whole property. MapLibre's
-  // pitched camera gets much farther from its center as pitch increases, so the
-  // previous combination of zoom 17 and pitch 72 still put the eye hundreds of
-  // feet away. Keep the camera at a drone-scale zoom and use a moderate pitch so
-  // the ground fills the viewport throughout the trip.
-  const zTravel = clamp(19.35 - Math.log2(Math.max(lengthM, 180) / 360) * 0.08, 19.15, 19.45);
-  const zGreen = zTravel + 0.25;
-  const startAGL = clamp(lengthM * 0.055, 24, 38), endAGL = 14; // HUD readout only
-  // Stay close enough to see individual golf features. The old 14.4 travel zoom
-  // framed almost the entire course and read like a satellite view rather than
-  // a flyover. A small zoom change now simulates a steady low-altitude chase.
-  const zTravel = clamp(17.15 - Math.log2(Math.max(lengthM, 180) / 360) * 0.18, 16.8, 17.35);
-  const zGreen = zTravel + 0.45;
-  const startAGL = clamp(lengthM * 0.1, 42, 68), endAGL = 24; // HUD readout only
+  const viewportHeight = opts.viewportHeight ?? 900;
+  const startAGL = clamp(lengthM * 0.045, 26, 34), endAGL = 16;
 
   // Local travel direction (look down the hole); stable near the endpoints.
   const dirAt = (e) => bearingOf(catmullRom(cl, Math.max(e - 0.05, 0)), catmullRom(cl, Math.min(e + 0.05, 1)));
@@ -47,25 +47,20 @@ export function buildFrames(hole, opts = {}) {
   for (let i = 0; i <= N; i++) {
     const t = i / N;
     const e = easeInOut(t); // smooth accel out of the tee, decel into the green
+    const center = catmullRom(cl, e);
+    const pitch = lerp(52, 58, e);
+    const agl = lerp(startAGL, endAGL, e);
     frames.push({
-      center: catmullRom(cl, e), // sweeps tee → green along the play line
+      center, // sweeps tee → green along the play line
       bearing: dirAt(e),
-      pitch: lerp(48, 58, e),
-      pitch: lerp(72, 76, e),
-      zoom: lerp(zTravel, zGreen, e),
-      agl: lerp(startAGL, endAGL, e),
+      pitch,
+      zoom: zoomForAGL(center, agl, pitch, viewportHeight),
+      agl,
     });
   }
 
   // Stop over the green. Rotating around a stationary center reads as a map
   // spin, not flight, and made the camera appear to climb after the approach.
-  // Finish with a short reveal instead of spinning a full revolution. Keep the
-  // same altitude as the arrival so the HUD and camera do not jump upward.
-  const orbit = opts.orbitSamples ?? 45;
-  const base = frames[frames.length - 1].bearing;
-  for (let i = 1; i <= orbit; i++) {
-    frames.push({ center: green, bearing: base + (i / orbit) * 65, pitch: 74, zoom: zGreen, agl: endAGL });
-  }
   return frames;
 }
 
@@ -100,7 +95,7 @@ export function createFlyover(map, hud) {
   return {
     load(h, opts = {}) {
       hole = h;
-      frames = buildFrames(h, opts);
+      frames = buildFrames(h, { viewportHeight: map.getCanvas().clientHeight, ...opts });
       idx = 0; playing = true; last = 0;
       holdUntil = performance.now() + (opts.holdMs ?? 1000); // hold the opening shot
       apply(frames[0]);
