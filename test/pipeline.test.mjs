@@ -10,6 +10,7 @@ import {
 import { parseOverpass, filterToCourse, parseContext } from '../src/data/overpass.js';
 import { assembleHole } from '../src/data/holeModel.js';
 import { holeToGeoJSON, contextToGeoJSON } from '../src/data/holeGeoJSON.js';
+import { buildFrames } from '../src/scene/flyover.js';
 
 test('tile math round-trips', () => {
   const z = 14;
@@ -94,6 +95,30 @@ test('assembleHole computes real yardage, orientation and elevation', () => {
   assert.ok(hole.greenCenter[1] > 43.852);
   assert.ok(Math.abs(hole.elevationChangeFt - 12) <= 1, `elev ${hole.elevationChangeFt}`);
   assert.equal(hole.bunkerRings.length, 1);
+});
+
+test('flyover follows the hole route at a readable drone height', () => {
+  const green = [-87.72, greenLat];
+  const hole = {
+    yardage: 394,
+    // Deliberately reversed to exercise the OSM direction correction.
+    centerline: [green, [-87.7203, 43.8516], [-87.72, 43.85]],
+    greenCenter: green,
+  };
+  const frames = buildFrames(hole, { flightSamples: 40, viewportHeight: 900 });
+  const arrival = frames[40];
+
+  assert.equal(frames.length, 41, 'there must be no stationary orbit appended to the flight');
+  assert.ok(haversineMeters(frames[0].center, [-87.72, 43.85]) < 2);
+  assert.ok(haversineMeters(arrival.center, green) < 2);
+  assert.ok(frames.every((frame) => frame.zoom > 19 && frame.zoom < 22), 'camera must retain full-hole context');
+  assert.ok(frames.every((frame) => frame.pitch >= 48 && frame.pitch <= 55));
+  assert.ok(frames.every((frame) => frame.agl >= 110 && frame.agl <= 220));
+  assert.ok(haversineMeters(frames[0].center, frames[4].center) < hole.yardage * 0.9144 * 0.03,
+    'opening must accelerate gently away from the tee');
+  assert.ok(frames.slice(1).every((frame, i) => frame.center[1] >= frames[i].center[1]),
+    'camera must advance along the tee-to-green route');
+  assert.equal(arrival.agl, 110, 'flight must finish over the green');
 });
 
 test('parseContext + contextToGeoJSON classify buildings/canopy/trees', () => {
