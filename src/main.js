@@ -27,8 +27,24 @@ function baseStyle(imgName) {
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#0b1512' } },
-      { id: 'sat', type: 'raster', source: 'sat', paint: { 'raster-fade-duration': 200 } },
-      { id: 'hillshade', type: 'hillshade', source: 'dem', paint: { 'hillshade-exaggeration': 0.5, 'hillshade-shadow-color': '#12261c' } },
+      { id: 'sat', type: 'raster', source: 'sat', paint: {
+        // Cross-fading adjacent imagery levels looked soft and flashed during
+        // the continuously moving flyover. Swap completed tiles directly.
+        'raster-fade-duration': 0,
+        'raster-resampling': 'linear',
+        'raster-saturation': 0.12,
+        'raster-contrast': 0.1,
+        'raster-brightness-min': 0.04,
+        'raster-brightness-max': 0.96,
+      } },
+      { id: 'hillshade', type: 'hillshade', source: 'dem', paint: {
+        'hillshade-exaggeration': 0.38,
+        'hillshade-illumination-anchor': 'map',
+        'hillshade-illumination-direction': 315,
+        'hillshade-shadow-color': '#162a20',
+        'hillshade-highlight-color': '#d8d1b4',
+        'hillshade-accent-color': '#416044',
+      } },
     ],
     sky: {},
   };
@@ -42,6 +58,7 @@ const map = new maplibregl.Map({
   style: baseStyle(firstCourse.imagerySource),
   center: [cx, cy],
   zoom: 15,
+  maxZoom: 24, // low-AGL flyover overzooms imagery while preserving terrain/geometry
   pitch: 65,
   maxPitch: 85,
   antialias: true,
@@ -52,17 +69,22 @@ map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bott
 
 const hud = createHud();
 const flyover = createFlyover(map, hud);
+let pinMarker = null;
 
 // ---- hole overlay layers ----------------------------------------------------
 const OVERLAY_IDS = [
-  'buildings-3d', 'canopy-3d', 'trees', 'water-fill', 'water-line', 'fairway-fill', 'fairway-line',
-  'bunker-fill', 'bunker-line', 'green-fill', 'green-line', 'tee-line', 'centerline', 'pin', 'teept',
+  'buildings-3d', 'canopy-3d', 'tree-trunks-3d', 'tree-crowns-3d', 'trees',
+  'water-fill', 'water-line', 'fairway-fill', 'fairway-line',
+  'bunker-fill', 'bunker-line', 'green-3d', 'green-fill', 'green-line',
+  'tee-3d', 'tee-fill', 'tee-line', 'centerline', 'pin-halo', 'pin', 'teept',
   'flagstick-3d',
 ];
 const SOURCE_IDS = ['fairways', 'greens', 'bunkers', 'water', 'tees', 'centerline', 'pin', 'teePoint',
-  'buildings', 'canopy', 'ctxTrees', 'flagstick'];
+  'buildings', 'canopy', 'ctxTrees', 'treeModels', 'flagstick'];
 
 function clearOverlays() {
+  pinMarker?.remove();
+  pinMarker = null;
   for (const id of OVERLAY_IDS) if (map.getLayer(id)) map.removeLayer(id);
   for (const id of SOURCE_IDS) if (map.getSource(id)) map.removeSource(id);
 }
@@ -80,6 +102,7 @@ function addOverlays(geo, ctx, hole) {
   map.addSource('buildings', { type: 'geojson', data: ctx.buildings });
   map.addSource('canopy', { type: 'geojson', data: ctx.canopy });
   map.addSource('ctxTrees', { type: 'geojson', data: ctx.trees });
+  map.addSource('treeModels', { type: 'geojson', data: ctx.treeModels });
   map.addSource('flagstick', { type: 'geojson', data: {
     type: 'FeatureCollection',
     features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [squareAround(hole.greenCenter, 0.25)] } }],
@@ -93,23 +116,61 @@ function addOverlays(geo, ctx, hole) {
     'fill-extrusion-color': '#c9c3b6', 'fill-extrusion-height': ['get', 'height'],
     'fill-extrusion-base': ['get', 'minHeight'], 'fill-extrusion-opacity': 0.95,
     'fill-extrusion-vertical-gradient': true } });
+  map.addLayer({ id: 'tree-trunks-3d', type: 'fill-extrusion', source: 'treeModels', paint: {
+    'fill-extrusion-color': '#60452d', 'fill-extrusion-base': 0,
+    'fill-extrusion-height': ['get', 'trunkTop'], 'fill-extrusion-opacity': 0.95 } });
+  map.addLayer({ id: 'tree-crowns-3d', type: 'fill-extrusion', source: 'treeModels', paint: {
+    'fill-extrusion-color': '#39723c', 'fill-extrusion-base': ['get', 'trunkTop'],
+    'fill-extrusion-height': ['get', 'crownTop'], 'fill-extrusion-opacity': 0.9,
+    'fill-extrusion-vertical-gradient': true } });
   map.addLayer({ id: 'trees', type: 'circle', source: 'ctxTrees', paint: {
     'circle-radius': 3, 'circle-color': '#3f7a3f', 'circle-opacity': 0.85 } });
   map.addLayer({ id: 'water-fill', type: 'fill', source: 'water', paint: { 'fill-color': '#2b6ca3', 'fill-opacity': 0.45 } });
   map.addLayer({ id: 'water-line', type: 'line', source: 'water', paint: { 'line-color': '#8ecbff', 'line-width': 1.2, 'line-opacity': 0.7 } });
-  map.addLayer({ id: 'fairway-fill', type: 'fill', source: 'fairways', paint: { 'fill-color': '#63b356', 'fill-opacity': 0.12 } });
-  map.addLayer({ id: 'fairway-line', type: 'line', source: 'fairways', paint: { 'line-color': '#9be08a', 'line-width': 1, 'line-opacity': 0.5 } });
+  map.addLayer({ id: 'fairway-fill', type: 'fill', source: 'fairways', paint: { 'fill-color': '#72c565', 'fill-opacity': 0.19 } });
+  map.addLayer({ id: 'fairway-line', type: 'line', source: 'fairways', paint: {
+    'line-color': '#c5f2b8', 'line-width': 1.6, 'line-opacity': 0.68, 'line-blur': 0.25 } });
   map.addLayer({ id: 'bunker-fill', type: 'fill', source: 'bunkers', paint: { 'fill-color': '#e6d3a3', 'fill-opacity': 0.5 } });
   map.addLayer({ id: 'bunker-line', type: 'line', source: 'bunkers', paint: { 'line-color': '#f0e4c0', 'line-width': 1, 'line-opacity': 0.8 } });
-  map.addLayer({ id: 'green-fill', type: 'fill', source: 'greens', paint: { 'fill-color': '#6aab5f', 'fill-opacity': 0.35 } });
-  map.addLayer({ id: 'green-line', type: 'line', source: 'greens', paint: { 'line-color': '#bfffb0', 'line-width': 1.5 } });
-  map.addLayer({ id: 'tee-line', type: 'line', source: 'tees', paint: { 'line-color': '#eef2ee', 'line-width': 1.2, 'line-opacity': 0.8 } });
-  map.addLayer({ id: 'centerline', type: 'line', source: 'centerline', paint: { 'line-color': '#e8a355', 'line-width': 2, 'line-dasharray': [2, 2], 'line-opacity': 0.85 } });
-  map.addLayer({ id: 'pin', type: 'circle', source: 'pin', paint: { 'circle-radius': 6, 'circle-color': '#c0392b', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
-  map.addLayer({ id: 'teept', type: 'circle', source: 'teePoint', paint: { 'circle-radius': 5, 'circle-color': '#eef2ee', 'circle-stroke-color': '#1a2a1e', 'circle-stroke-width': 1.5 } });
+  map.addLayer({ id: 'green-3d', type: 'fill-extrusion', source: 'greens', paint: {
+    'fill-extrusion-color': '#69bf5f', 'fill-extrusion-base': 0,
+    'fill-extrusion-height': 0.28, 'fill-extrusion-opacity': 0.82,
+    'fill-extrusion-vertical-gradient': true } });
+  map.addLayer({ id: 'green-fill', type: 'fill', source: 'greens', paint: { 'fill-color': '#72dc69', 'fill-opacity': 0.3 } });
+  map.addLayer({ id: 'green-line', type: 'line', source: 'greens', paint: { 'line-color': '#d7ffd0', 'line-width': 2.4, 'line-opacity': 0.95 } });
+  map.addLayer({ id: 'tee-3d', type: 'fill-extrusion', source: 'tees', paint: {
+    'fill-extrusion-color': '#b7dfa9', 'fill-extrusion-base': 0,
+    'fill-extrusion-height': 0.4, 'fill-extrusion-opacity': 0.9,
+    'fill-extrusion-vertical-gradient': true } });
+  map.addLayer({ id: 'tee-fill', type: 'fill', source: 'tees', paint: { 'fill-color': '#d8ffd0', 'fill-opacity': 0.3 } });
+  map.addLayer({ id: 'tee-line', type: 'line', source: 'tees', paint: {
+    'line-color': '#f4fff1', 'line-width': 2.5, 'line-opacity': 1, 'line-blur': 0.15 } });
+  map.addLayer({ id: 'centerline', type: 'line', source: 'centerline', paint: { 'line-color': '#f2bc72', 'line-width': 1.4, 'line-dasharray': [2, 3], 'line-opacity': 0.58 } });
+  // The halo is terrain-anchored at the exact same green coordinate as the DOM
+  // flag, making the flag-to-green attachment unambiguous at every pitch.
+  map.addLayer({ id: 'pin-halo', type: 'circle', source: 'pin', paint: {
+    'circle-radius': 15, 'circle-color': '#fff5cf', 'circle-opacity': 0.2,
+    'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5,
+    'circle-stroke-opacity': 0.75, 'circle-pitch-scale': 'map' } });
+  map.addLayer({ id: 'pin', type: 'circle', source: 'pin', paint: {
+    'circle-radius': 7, 'circle-color': '#c93227', 'circle-stroke-color': '#fff',
+    'circle-stroke-width': 2.5, 'circle-pitch-scale': 'map' } });
+  map.addLayer({ id: 'teept', type: 'circle', source: 'teePoint', paint: {
+    'circle-radius': 8, 'circle-color': '#f5fff2', 'circle-opacity': 0.95,
+    'circle-stroke-color': '#24552a', 'circle-stroke-width': 3 } });
   // 3D flagstick at the pin
   map.addLayer({ id: 'flagstick-3d', type: 'fill-extrusion', source: 'flagstick', paint: {
     'fill-extrusion-color': '#c0392b', 'fill-extrusion-height': 4, 'fill-extrusion-base': 0, 'fill-extrusion-opacity': 1 } });
+
+  const flag = document.createElement('div');
+  flag.className = 'pin-flag';
+  flag.innerHTML = '<span class="pin-flag-pole"></span><span class="pin-flag-cloth"></span><span class="pin-flag-cup"></span><span class="pin-flag-label">PIN</span>';
+  pinMarker = new maplibregl.Marker({
+    element: flag, anchor: 'bottom', pitchAlignment: 'viewport', rotationAlignment: 'viewport',
+    opacity: '1', opacityWhenCovered: '1', subpixelPositioning: true,
+  })
+    .setLngLat(hole.greenCenter)
+    .addTo(map);
 }
 
 // ---- elevation change from real terrain ------------------------------------
@@ -151,7 +212,9 @@ async function present(i) {
   if (data.loadContext) {
     data.loadContext().then((ctx) => {
       if (!ctx || data !== current) return; // ignore if the user switched holes
-      for (const [srcId, key] of [['buildings', 'buildings'], ['canopy', 'canopy'], ['ctxTrees', 'trees']]) {
+      for (const [srcId, key] of [
+        ['buildings', 'buildings'], ['canopy', 'canopy'], ['ctxTrees', 'trees'], ['treeModels', 'treeModels'],
+      ]) {
         const s = map.getSource(srcId);
         if (s) s.setData(ctx[key]);
       }
@@ -241,11 +304,12 @@ function boot() {
   try { map.setTerrain({ source: 'dem', exaggeration: relief }); } catch (e) { console.warn('terrain:', e); }
   try {
     map.setSky({
-      'sky-color': '#0d2430', 'horizon-color': '#3d6b5c', 'fog-color': '#2b3f3a',
-      'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.4, 'atmosphere-blend': 0.7,
+      'sky-color': '#7fa8b7', 'horizon-color': '#d8c9a8', 'fog-color': '#aeb9aa',
+      'sky-horizon-blend': 0.72, 'horizon-fog-blend': 0.62,
+      'fog-ground-blend': 0.28, 'atmosphere-blend': 0.82,
     });
   } catch (e) { console.warn('sky:', e); }
-  try { map.setLight({ anchor: 'map', color: '#fff2df', intensity: 0.55, position: [1.4, 210, 30] }); } catch (e) { console.warn('light:', e); }
+  try { map.setLight({ anchor: 'map', color: '#fff0d2', intensity: 0.7, position: [1.5, 315, 38] }); } catch (e) { console.warn('light:', e); }
 
   const shimmer = () => {
     if (map.getLayer('water-fill')) {

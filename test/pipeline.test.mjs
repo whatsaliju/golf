@@ -10,6 +10,7 @@ import {
 import { parseOverpass, filterToCourse, parseContext } from '../src/data/overpass.js';
 import { assembleHole } from '../src/data/holeModel.js';
 import { holeToGeoJSON, contextToGeoJSON } from '../src/data/holeGeoJSON.js';
+import { buildFrames } from '../src/scene/flyover.js';
 
 test('tile math round-trips', () => {
   const z = 14;
@@ -96,6 +97,30 @@ test('assembleHole computes real yardage, orientation and elevation', () => {
   assert.equal(hole.bunkerRings.length, 1);
 });
 
+test('flyover follows the hole route at a readable drone height', () => {
+  const green = [-87.72, greenLat];
+  const hole = {
+    yardage: 394,
+    // Deliberately reversed to exercise the OSM direction correction.
+    centerline: [green, [-87.7203, 43.8516], [-87.72, 43.85]],
+    greenCenter: green,
+  };
+  const frames = buildFrames(hole, { flightSamples: 40, viewportHeight: 900 });
+  const arrival = frames[40];
+
+  assert.equal(frames.length, 41, 'there must be no stationary orbit appended to the flight');
+  assert.ok(haversineMeters(frames[0].center, [-87.72, 43.85]) < 2);
+  assert.ok(haversineMeters(arrival.center, green) < 2);
+  assert.ok(frames.every((frame) => frame.zoom > 18.5 && frame.zoom < 21), 'camera must retain full-hole context');
+  assert.ok(frames.every((frame) => frame.pitch >= 48 && frame.pitch <= 55));
+  assert.ok(frames.every((frame) => frame.agl >= 180 && frame.agl <= 300));
+  assert.ok(haversineMeters(frames[0].center, frames[4].center) < hole.yardage * 0.9144 * 0.03,
+    'opening must accelerate gently away from the tee');
+  assert.ok(frames.slice(1).every((frame, i) => frame.center[1] >= frames[i].center[1]),
+    'camera must advance along the tee-to-green route');
+  assert.equal(arrival.agl, 180, 'flight must finish over the green');
+});
+
 test('parseContext + contextToGeoJSON classify buildings/canopy/trees', () => {
   const ctxJson = {
     elements: [
@@ -112,6 +137,8 @@ test('parseContext + contextToGeoJSON classify buildings/canopy/trees', () => {
   const gj = contextToGeoJSON(ctx);
   assert.equal(gj.buildings.features[0].properties.height, ctx.buildings[0].height);
   assert.equal(gj.trees.features[0].geometry.type, 'Point');
+  assert.equal(gj.treeModels.features[0].geometry.type, 'Polygon');
+  assert.equal(gj.treeModels.features[0].properties.crownTop, 11);
 });
 
 test('holeToGeoJSON produces valid closed polygons + linestring', () => {
