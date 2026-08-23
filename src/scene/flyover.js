@@ -43,7 +43,7 @@ export function buildFrames(hole, opts = {}) {
   // A golf-hole establishing pass is more useful around 160–220 ft than at the
   // previous 65–85 ft: it keeps the tee, landing area, hazards, and green in
   // context while remaining far below a course-wide aerial view.
-  const startAGL = clamp(lengthM * 0.65, 240, 300), endAGL = 180;
+  const startAGL = clamp(lengthM * 0.42, 160, 220), endAGL = 110;
 
   // Local travel direction (look down the hole); stable near the endpoints.
   const dirAt = (e) => bearingOf(catmullRom(cl, Math.max(e - 0.05, 0)), catmullRom(cl, Math.min(e + 0.05, 1)));
@@ -73,21 +73,7 @@ export function createFlyover(map, hud) {
   let frames = [], hole = null, idx = 0, playing = false, speed = 1, raf = null, last = 0;
   let onDone = null;
   let holdUntil = 0;
-  const PACE = 0.28; // slow survey pace: enough time to read each landing zone
-
-  function frameAt(position) {
-    const a = frames[Math.floor(position)];
-    const b = frames[Math.min(Math.ceil(position), frames.length - 1)];
-    const mix = position - Math.floor(position);
-    if (!a || !b || mix === 0) return a || b;
-    return {
-      center: [lerp(a.center[0], b.center[0], mix), lerp(a.center[1], b.center[1], mix)],
-      bearing: lerp(a.bearing, b.bearing, mix),
-      pitch: lerp(a.pitch, b.pitch, mix),
-      zoom: lerp(a.zoom, b.zoom, mix),
-      agl: lerp(a.agl, b.agl, mix),
-    };
-  }
+  const PACE = 0.48; // deliberate enough to read hazards and the intended route
 
   function apply(frame) {
     try {
@@ -106,7 +92,7 @@ export function createFlyover(map, hud) {
     if (idx >= frames.length - 1) { idx = frames.length - 1; playing = false; finished = true; }
     const frame = frameAt(idx);
     apply(frame);
-    const progress = idx / (frames.length - 1);
+    const progress = Math.floor(idx) / (frames.length - 1);
     hud.update({ altitudeFt: frame.agl }, progress, hole);
     if (finished && onDone) { const cb = onDone; onDone = null; cb(); }
   }
@@ -116,11 +102,11 @@ export function createFlyover(map, hud) {
       hole = h;
       frames = buildFrames(h, { viewportHeight: map.getCanvas().clientHeight, ...opts });
       idx = 0; playing = true; last = 0;
-      holdUntil = performance.now() + (opts.holdMs ?? 2200); // establish the tee and route
+      holdUntil = performance.now() + (opts.holdMs ?? 1800); // establish the tee and route
       apply(frames[0]);
       if (!raf) raf = requestAnimationFrame(tick);
     },
-    replay(done) { idx = 0; playing = true; last = 0; holdUntil = performance.now() + 1600; onDone = done || null; },
+    replay(done) { idx = 0; playing = true; last = 0; holdUntil = performance.now() + 1200; onDone = done || null; },
     setSpeed(s) { speed = s; },
     isReady: () => frames.length > 0,
   };
