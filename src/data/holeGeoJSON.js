@@ -8,6 +8,14 @@ const closeRing = (ring) => {
 };
 
 const fc = (features) => ({ type: 'FeatureCollection', features });
+const squareMeters = ([lng, lat], radiusM) => {
+  const dLat = radiusM / 111320;
+  const dLng = radiusM / (111320 * Math.cos((lat * Math.PI) / 180));
+  return closeRing([
+    [lng - dLng, lat - dLat], [lng + dLng, lat - dLat],
+    [lng + dLng, lat + dLat], [lng - dLng, lat + dLat],
+  ]);
+};
 const poly = (rings, props = {}) =>
   rings.filter((r) => r.length >= 3).map((r) => ({
     type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: [closeRing(r)] },
@@ -15,7 +23,7 @@ const poly = (rings, props = {}) =>
 
 /** Context (buildings / tree canopy / trees) → GeoJSON for 3D extrusion layers. */
 export function contextToGeoJSON(ctx) {
-  if (!ctx) return { buildings: fc([]), canopy: fc([]), trees: fc([]) };
+  if (!ctx) return { buildings: fc([]), canopy: fc([]), trees: fc([]), treeModels: fc([]) };
   const buildings = fc(
     (ctx.buildings || []).filter((b) => b.ring.length >= 3).map((b) => ({
       type: 'Feature', properties: { height: b.height, minHeight: b.minHeight },
@@ -31,7 +39,13 @@ export function contextToGeoJSON(ctx) {
   const trees = fc(
     (ctx.trees || []).map((p) => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: p } }))
   );
-  return { buildings, canopy, trees };
+  const treeModels = fc(
+    (ctx.trees || []).map((p) => ({
+      type: 'Feature', properties: { trunkTop: 6, crownTop: 11 },
+      geometry: { type: 'Polygon', coordinates: [squareMeters(p, 1.25)] },
+    }))
+  );
+  return { buildings, canopy, trees, treeModels };
 }
 
 export function holeToGeoJSON(hole) {
