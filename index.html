@@ -65,18 +65,15 @@
   .btn:hover{background:rgba(232,163,85,0.18);border-color:var(--accent);}
 
   /* Screen-space flag marker: stays legible even when the terrain is pitched. */
-  .pin-flag{position:relative;width:54px;height:76px;z-index:8;
-    filter:drop-shadow(0 4px 4px rgba(0,0,0,.85));pointer-events:none;transform-origin:50% 100%;}
-  .pin-flag-pole{position:absolute;left:19px;bottom:0;width:4px;height:62px;border-radius:2px;
+  .pin-flag{position:relative;width:34px;height:58px;filter:drop-shadow(0 3px 3px rgba(0,0,0,.7));
+    pointer-events:none;transform-origin:50% 100%;}
+  .pin-flag-pole{position:absolute;left:15px;bottom:0;width:3px;height:48px;border-radius:2px;
     background:linear-gradient(90deg,#ddd,#fff 45%,#aaa);box-shadow:0 0 0 1px rgba(0,0,0,.25);}
-  .pin-flag-cloth{position:absolute;left:23px;top:4px;width:34px;height:24px;
+  .pin-flag-cloth{position:absolute;left:18px;top:4px;width:25px;height:18px;
     background:linear-gradient(135deg,#e74b3c,#b51f19);clip-path:polygon(0 0,100% 20%,78% 100%,0 78%);
     animation:flag-wave 1.8s ease-in-out infinite alternate;transform-origin:left center;}
-  .pin-flag-cup{position:absolute;left:12px;bottom:-4px;width:18px;height:8px;border-radius:50%;
+  .pin-flag-cup{position:absolute;left:10px;bottom:-3px;width:13px;height:6px;border-radius:50%;
     background:rgba(9,18,12,.8);border:1px solid rgba(255,255,255,.75);}
-  .pin-flag-label{position:absolute;left:29px;top:31px;padding:2px 5px;border-radius:2px;
-    background:rgba(8,17,12,.82);border:1px solid rgba(255,255,255,.55);color:#fff;
-    font:700 9px/1 'JetBrains Mono',monospace;letter-spacing:.08em;white-space:nowrap;}
   @keyframes flag-wave{from{transform:skewY(-3deg) scaleX(.9)}to{transform:skewY(4deg) scaleX(1.05)}}
 
   .note{position:absolute;top:78px;right:28px;max-width:260px;font-size:11px;

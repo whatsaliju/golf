@@ -73,7 +73,7 @@ export function createFlyover(map, hud) {
   let frames = [], hole = null, idx = 0, playing = false, speed = 1, raf = null, last = 0;
   let onDone = null;
   let holdUntil = 0;
-  const PACE = 0.4; // slow survey pace: enough time to read each landing zone
+  const PACE = 0.48; // deliberate enough to read hazards and the intended route
 
   function apply(frame) {
     try {
@@ -102,11 +102,11 @@ export function createFlyover(map, hud) {
       hole = h;
       frames = buildFrames(h, { viewportHeight: map.getCanvas().clientHeight, ...opts });
       idx = 0; playing = true; last = 0;
-      holdUntil = performance.now() + (opts.holdMs ?? 2200); // establish the tee and route
+      holdUntil = performance.now() + (opts.holdMs ?? 1800); // establish the tee and route
       apply(frames[0]);
       if (!raf) raf = requestAnimationFrame(tick);
     },
-    replay(done) { idx = 0; playing = true; last = 0; holdUntil = performance.now() + 1600; onDone = done || null; },
+    replay(done) { idx = 0; playing = true; last = 0; holdUntil = performance.now() + 1200; onDone = done || null; },
     setSpeed(s) { speed = s; },
     isReady: () => frames.length > 0,
   };

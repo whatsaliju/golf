@@ -71,10 +71,8 @@ let pinMarker = null;
 
 // ---- hole overlay layers ----------------------------------------------------
 const OVERLAY_IDS = [
-  'buildings-3d', 'canopy-3d', 'tree-trunks-3d', 'tree-crowns-3d', 'trees',
-  'water-fill', 'water-line', 'fairway-fill', 'fairway-line',
-  'bunker-fill', 'bunker-line', 'green-3d', 'green-fill', 'green-line',
-  'tee-3d', 'tee-fill', 'tee-line', 'centerline', 'pin-halo', 'pin', 'teept',
+  'buildings-3d', 'canopy-3d', 'trees', 'water-fill', 'water-line', 'fairway-fill', 'fairway-line',
+  'bunker-fill', 'bunker-line', 'green-fill', 'green-line', 'tee-fill', 'tee-line', 'centerline', 'pin', 'teept',
   'flagstick-3d',
 ];
 const SOURCE_IDS = ['fairways', 'greens', 'bunkers', 'water', 'tees', 'centerline', 'pin', 'teePoint',
@@ -130,29 +128,13 @@ function addOverlays(geo, ctx, hole) {
     'line-color': '#c5f2b8', 'line-width': 1.6, 'line-opacity': 0.68, 'line-blur': 0.25 } });
   map.addLayer({ id: 'bunker-fill', type: 'fill', source: 'bunkers', paint: { 'fill-color': '#e6d3a3', 'fill-opacity': 0.5 } });
   map.addLayer({ id: 'bunker-line', type: 'line', source: 'bunkers', paint: { 'line-color': '#f0e4c0', 'line-width': 1, 'line-opacity': 0.8 } });
-  map.addLayer({ id: 'green-3d', type: 'fill-extrusion', source: 'greens', paint: {
-    'fill-extrusion-color': '#69bf5f', 'fill-extrusion-base': 0,
-    'fill-extrusion-height': 0.28, 'fill-extrusion-opacity': 0.82,
-    'fill-extrusion-vertical-gradient': true } });
-  map.addLayer({ id: 'green-fill', type: 'fill', source: 'greens', paint: { 'fill-color': '#72dc69', 'fill-opacity': 0.3 } });
+  map.addLayer({ id: 'green-fill', type: 'fill', source: 'greens', paint: { 'fill-color': '#72dc69', 'fill-opacity': 0.34 } });
   map.addLayer({ id: 'green-line', type: 'line', source: 'greens', paint: { 'line-color': '#d7ffd0', 'line-width': 2.4, 'line-opacity': 0.95 } });
-  map.addLayer({ id: 'tee-3d', type: 'fill-extrusion', source: 'tees', paint: {
-    'fill-extrusion-color': '#b7dfa9', 'fill-extrusion-base': 0,
-    'fill-extrusion-height': 0.4, 'fill-extrusion-opacity': 0.9,
-    'fill-extrusion-vertical-gradient': true } });
   map.addLayer({ id: 'tee-fill', type: 'fill', source: 'tees', paint: { 'fill-color': '#d8ffd0', 'fill-opacity': 0.3 } });
   map.addLayer({ id: 'tee-line', type: 'line', source: 'tees', paint: {
     'line-color': '#f4fff1', 'line-width': 2.5, 'line-opacity': 1, 'line-blur': 0.15 } });
   map.addLayer({ id: 'centerline', type: 'line', source: 'centerline', paint: { 'line-color': '#f2bc72', 'line-width': 1.4, 'line-dasharray': [2, 3], 'line-opacity': 0.58 } });
-  // The halo is terrain-anchored at the exact same green coordinate as the DOM
-  // flag, making the flag-to-green attachment unambiguous at every pitch.
-  map.addLayer({ id: 'pin-halo', type: 'circle', source: 'pin', paint: {
-    'circle-radius': 15, 'circle-color': '#fff5cf', 'circle-opacity': 0.2,
-    'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5,
-    'circle-stroke-opacity': 0.75, 'circle-pitch-scale': 'map' } });
-  map.addLayer({ id: 'pin', type: 'circle', source: 'pin', paint: {
-    'circle-radius': 7, 'circle-color': '#c93227', 'circle-stroke-color': '#fff',
-    'circle-stroke-width': 2.5, 'circle-pitch-scale': 'map' } });
+  map.addLayer({ id: 'pin', type: 'circle', source: 'pin', paint: { 'circle-radius': 6, 'circle-color': '#c0392b', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
   map.addLayer({ id: 'teept', type: 'circle', source: 'teePoint', paint: {
     'circle-radius': 8, 'circle-color': '#f5fff2', 'circle-opacity': 0.95,
     'circle-stroke-color': '#24552a', 'circle-stroke-width': 3 } });
@@ -162,11 +144,8 @@ function addOverlays(geo, ctx, hole) {
 
   const flag = document.createElement('div');
   flag.className = 'pin-flag';
-  flag.innerHTML = '<span class="pin-flag-pole"></span><span class="pin-flag-cloth"></span><span class="pin-flag-cup"></span><span class="pin-flag-label">PIN</span>';
-  pinMarker = new maplibregl.Marker({
-    element: flag, anchor: 'bottom', pitchAlignment: 'viewport', rotationAlignment: 'viewport',
-    opacity: '1', opacityWhenCovered: '1', subpixelPositioning: true,
-  })
+  flag.innerHTML = '<span class="pin-flag-pole"></span><span class="pin-flag-cloth"></span><span class="pin-flag-cup"></span>';
+  pinMarker = new maplibregl.Marker({ element: flag, anchor: 'bottom' })
     .setLngLat(hole.greenCenter)
     .addTo(map);
 }
