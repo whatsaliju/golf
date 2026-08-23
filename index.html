@@ -78,6 +78,27 @@
   @keyframes spin{to{transform:rotate(360deg);}}
   #status-msg{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--ink-dim);letter-spacing:0.04em;}
   #status-detail{font-size:11px;color:var(--ink-dim);opacity:0.7;max-width:420px;}
+
+  @media (max-width:600px){
+    .hud-top{padding:18px 16px;gap:12px;}
+    .hud-top>div:first-child{max-width:55%;}
+    .hole-title{font-size:18px;line-height:1.15;}
+    .hole-sub{font-size:10px;line-height:1.25;}
+    .hud-badge{max-width:42%;overflow:hidden;text-overflow:ellipsis;padding:4px 7px;font-size:9px;}
+
+    .controls{top:118px;left:16px;right:16px;max-width:none;display:grid;
+      grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;}
+    .btn{min-width:0;padding:7px 4px;font-size:9px;white-space:nowrap;}
+    .note{top:196px;left:16px;right:16px;max-width:none;font-size:10px;line-height:1.35;}
+
+    .telemetry{bottom:12px;left:12px;right:12px;display:grid;grid-template-columns:1fr 1fr;}
+    .metric{padding:9px 10px;min-width:0;}
+    .metric-label{font-size:8px;}
+    .metric-value{font-size:19px;margin-top:2px;}
+    .metric-value span{font-size:10px;}
+    .progress-rail{bottom:133px;left:12px;right:12px;}
+    .maplibregl-ctrl-bottom-right{bottom:137px;}
+  }
 </style>
 </head>
 <body>
