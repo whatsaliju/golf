@@ -97,7 +97,7 @@ test('assembleHole computes real yardage, orientation and elevation', () => {
   assert.equal(hole.bunkerRings.length, 1);
 });
 
-test('flyover starts over the tee, stays at drone scale, and stops over the green', () => {
+test('flyover follows the hole route at a readable drone height', () => {
   const green = [-87.72, greenLat];
   const hole = {
     yardage: 394,
@@ -111,10 +111,12 @@ test('flyover starts over the tee, stays at drone scale, and stops over the gree
   assert.equal(frames.length, 41, 'there must be no stationary orbit appended to the flight');
   assert.ok(haversineMeters(frames[0].center, [-87.72, 43.85]) < 2);
   assert.ok(haversineMeters(arrival.center, green) < 2);
-  assert.ok(frames.every((frame) => frame.zoom > 22), 'zoom must produce the requested low AGL');
-  assert.ok(frames.every((frame) => frame.pitch >= 52 && frame.pitch <= 58));
-  assert.ok(frames.every((frame) => frame.agl <= 34), 'HUD altitude must remain low');
-  assert.equal(arrival.agl, 16, 'flight must finish low over the green');
+  assert.ok(frames.every((frame) => frame.zoom > 20 && frame.zoom < 23), 'camera must remain at drone scale');
+  assert.ok(frames.every((frame) => frame.pitch >= 50 && frame.pitch <= 57));
+  assert.ok(frames.every((frame) => frame.agl >= 45 && frame.agl <= 85));
+  assert.ok(frames.slice(1).every((frame, i) => frame.center[1] >= frames[i].center[1]),
+    'camera must advance along the tee-to-green route');
+  assert.equal(arrival.agl, 45, 'flight must finish over the green');
 });
 
 test('parseContext + contextToGeoJSON classify buildings/canopy/trees', () => {
