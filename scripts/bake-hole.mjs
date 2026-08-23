@@ -27,7 +27,10 @@ async function terrariumSampler(bbox) {
   try { sharp = (await import('sharp')).default; }
   catch { console.warn('  (sharp not installed → elevation left for runtime)'); return null; }
 
-  const z = pickZoomForBbox(bbox, { minPx: 256, maxZoom: 14, minZoom: 11, maxTiles: 16 });
+  // Sample the highest native Terrarium level and retain a larger mosaic around
+  // the hole. This improves tee/green elevation and elevation-profile accuracy;
+  // runtime terrain still streams the same open DEM tiles directly.
+  const z = pickZoomForBbox(bbox, { minPx: 1024, maxZoom: 15, minZoom: 13, maxTiles: 64 });
   const { x0, x1, y0, y1 } = tileRangeForBbox(bbox, z);
   const nx = x1 - x0 + 1, ny = y1 - y0 + 1, W = nx * 256, H = ny * 256;
   const grid = new Float32Array(W * H);
