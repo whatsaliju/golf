@@ -41,7 +41,7 @@ export function createHud() {
   function update(frame, progress, hole) {
     const remaining = Math.round(hole.yardage * (1 - Math.min(progress * 1.3, 1)));
     els.dist.innerHTML = `${Math.max(remaining, 0)}<span>yd</span>`;
-    els.alt.innerHTML = `${Math.round(frame.altitude * 3.281)}<span>ft AGL</span>`;
+    els.alt.innerHTML = `${Math.round(frame.altitudeFt)}<span>ft AGL</span>`;
     els.prog.innerHTML = `${Math.round(progress * 100)}<span>%</span>`;
     els.fill.style.width = `${progress * 100}%`;
   }

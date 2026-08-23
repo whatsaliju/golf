@@ -67,17 +67,20 @@ map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bott
 
 const hud = createHud();
 const flyover = createFlyover(map, hud);
+let pinMarker = null;
 
 // ---- hole overlay layers ----------------------------------------------------
 const OVERLAY_IDS = [
   'buildings-3d', 'canopy-3d', 'trees', 'water-fill', 'water-line', 'fairway-fill', 'fairway-line',
-  'bunker-fill', 'bunker-line', 'green-fill', 'green-line', 'tee-line', 'centerline', 'pin', 'teept',
+  'bunker-fill', 'bunker-line', 'green-fill', 'green-line', 'tee-fill', 'tee-line', 'centerline', 'pin', 'teept',
   'flagstick-3d',
 ];
 const SOURCE_IDS = ['fairways', 'greens', 'bunkers', 'water', 'tees', 'centerline', 'pin', 'teePoint',
   'buildings', 'canopy', 'ctxTrees', 'flagstick'];
 
 function clearOverlays() {
+  pinMarker?.remove();
+  pinMarker = null;
   for (const id of OVERLAY_IDS) if (map.getLayer(id)) map.removeLayer(id);
   for (const id of SOURCE_IDS) if (map.getSource(id)) map.removeSource(id);
 }
@@ -112,19 +115,31 @@ function addOverlays(geo, ctx, hole) {
     'circle-radius': 3, 'circle-color': '#3f7a3f', 'circle-opacity': 0.85 } });
   map.addLayer({ id: 'water-fill', type: 'fill', source: 'water', paint: { 'fill-color': '#2b6ca3', 'fill-opacity': 0.45 } });
   map.addLayer({ id: 'water-line', type: 'line', source: 'water', paint: { 'line-color': '#8ecbff', 'line-width': 1.2, 'line-opacity': 0.7 } });
-  map.addLayer({ id: 'fairway-fill', type: 'fill', source: 'fairways', paint: { 'fill-color': '#72b968', 'fill-opacity': 0.08 } });
-  map.addLayer({ id: 'fairway-line', type: 'line', source: 'fairways', paint: { 'line-color': '#b2dda5', 'line-width': 0.8, 'line-opacity': 0.32 } });
+  map.addLayer({ id: 'fairway-fill', type: 'fill', source: 'fairways', paint: { 'fill-color': '#72c565', 'fill-opacity': 0.19 } });
+  map.addLayer({ id: 'fairway-line', type: 'line', source: 'fairways', paint: {
+    'line-color': '#c5f2b8', 'line-width': 1.6, 'line-opacity': 0.68, 'line-blur': 0.25 } });
   map.addLayer({ id: 'bunker-fill', type: 'fill', source: 'bunkers', paint: { 'fill-color': '#e6d3a3', 'fill-opacity': 0.5 } });
   map.addLayer({ id: 'bunker-line', type: 'line', source: 'bunkers', paint: { 'line-color': '#f0e4c0', 'line-width': 1, 'line-opacity': 0.8 } });
-  map.addLayer({ id: 'green-fill', type: 'fill', source: 'greens', paint: { 'fill-color': '#78c36d', 'fill-opacity': 0.24 } });
-  map.addLayer({ id: 'green-line', type: 'line', source: 'greens', paint: { 'line-color': '#bfffb0', 'line-width': 1.5 } });
-  map.addLayer({ id: 'tee-line', type: 'line', source: 'tees', paint: { 'line-color': '#eef2ee', 'line-width': 1.2, 'line-opacity': 0.8 } });
+  map.addLayer({ id: 'green-fill', type: 'fill', source: 'greens', paint: { 'fill-color': '#72dc69', 'fill-opacity': 0.34 } });
+  map.addLayer({ id: 'green-line', type: 'line', source: 'greens', paint: { 'line-color': '#d7ffd0', 'line-width': 2.4, 'line-opacity': 0.95 } });
+  map.addLayer({ id: 'tee-fill', type: 'fill', source: 'tees', paint: { 'fill-color': '#d8ffd0', 'fill-opacity': 0.3 } });
+  map.addLayer({ id: 'tee-line', type: 'line', source: 'tees', paint: {
+    'line-color': '#f4fff1', 'line-width': 2.5, 'line-opacity': 1, 'line-blur': 0.15 } });
   map.addLayer({ id: 'centerline', type: 'line', source: 'centerline', paint: { 'line-color': '#f2bc72', 'line-width': 1.4, 'line-dasharray': [2, 3], 'line-opacity': 0.58 } });
   map.addLayer({ id: 'pin', type: 'circle', source: 'pin', paint: { 'circle-radius': 6, 'circle-color': '#c0392b', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
-  map.addLayer({ id: 'teept', type: 'circle', source: 'teePoint', paint: { 'circle-radius': 5, 'circle-color': '#eef2ee', 'circle-stroke-color': '#1a2a1e', 'circle-stroke-width': 1.5 } });
+  map.addLayer({ id: 'teept', type: 'circle', source: 'teePoint', paint: {
+    'circle-radius': 8, 'circle-color': '#f5fff2', 'circle-opacity': 0.95,
+    'circle-stroke-color': '#24552a', 'circle-stroke-width': 3 } });
   // 3D flagstick at the pin
   map.addLayer({ id: 'flagstick-3d', type: 'fill-extrusion', source: 'flagstick', paint: {
     'fill-extrusion-color': '#c0392b', 'fill-extrusion-height': 4, 'fill-extrusion-base': 0, 'fill-extrusion-opacity': 1 } });
+
+  const flag = document.createElement('div');
+  flag.className = 'pin-flag';
+  flag.innerHTML = '<span class="pin-flag-pole"></span><span class="pin-flag-cloth"></span><span class="pin-flag-cup"></span>';
+  pinMarker = new maplibregl.Marker({ element: flag, anchor: 'bottom' })
+    .setLngLat(hole.greenCenter)
+    .addTo(map);
 }
 
 // ---- elevation change from real terrain ------------------------------------

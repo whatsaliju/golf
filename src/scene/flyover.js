@@ -93,7 +93,7 @@ export function createFlyover(map, hud) {
     const frame = frames[Math.floor(idx)];
     apply(frame);
     const progress = Math.floor(idx) / (frames.length - 1);
-    hud.update({ altitude: frame.agl }, progress, hole);
+    hud.update({ altitudeFt: frame.agl }, progress, hole);
     if (finished && onDone) { const cb = onDone; onDone = null; cb(); }
   }
 
