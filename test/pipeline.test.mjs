@@ -114,6 +114,8 @@ test('flyover follows the hole route at a readable drone height', () => {
   assert.ok(frames.every((frame) => frame.zoom > 19 && frame.zoom < 22), 'camera must retain full-hole context');
   assert.ok(frames.every((frame) => frame.pitch >= 48 && frame.pitch <= 55));
   assert.ok(frames.every((frame) => frame.agl >= 110 && frame.agl <= 220));
+  assert.ok(haversineMeters(frames[0].center, frames[4].center) < hole.yardage * 0.9144 * 0.03,
+    'opening must accelerate gently away from the tee');
   assert.ok(frames.slice(1).every((frame, i) => frame.center[1] >= frames[i].center[1]),
     'camera must advance along the tee-to-green route');
   assert.equal(arrival.agl, 110, 'flight must finish over the green');

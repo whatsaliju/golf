@@ -1,5 +1,5 @@
 // Cinematic flyover driven by map.jumpTo() per frame — a Catmull-Rom glide down
-// the hole (looking ahead) that eases in closer, then an orbit around the green.
+// the hole that starts with an establishing look and finishes over the green.
 //
 // This deliberately does NOT use MapLibre's FreeCamera API: FreeCamera +
 // setTerrain is fragile (setFreeCameraOptions can throw once 3D terrain is on),
@@ -9,7 +9,9 @@
 
 import { catmullRom, bearing as bearingOf, haversineMeters } from '../data/geo.js';
 
-const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+// Quintic smootherstep has zero velocity and acceleration at both ends. That
+// avoids the abrupt launch the quadratic easing produced after the opening hold.
+const easeInOut = (t) => t * t * t * (t * (t * 6 - 15) + 10);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const lerp = (a, b, t) => a + (b - a) * t;
 const EARTH_CIRCUMFERENCE_M = 40075016.686;
@@ -71,7 +73,7 @@ export function createFlyover(map, hud) {
   let frames = [], hole = null, idx = 0, playing = false, speed = 1, raf = null, last = 0;
   let onDone = null;
   let holdUntil = 0;
-  const PACE = 0.62; // <1 slows the flight so it reads as a cinematic flyover
+  const PACE = 0.48; // deliberate enough to read hazards and the intended route
 
   function apply(frame) {
     try {
@@ -100,11 +102,11 @@ export function createFlyover(map, hud) {
       hole = h;
       frames = buildFrames(h, { viewportHeight: map.getCanvas().clientHeight, ...opts });
       idx = 0; playing = true; last = 0;
-      holdUntil = performance.now() + (opts.holdMs ?? 1000); // hold the opening shot
+      holdUntil = performance.now() + (opts.holdMs ?? 1800); // establish the tee and route
       apply(frames[0]);
       if (!raf) raf = requestAnimationFrame(tick);
     },
-    replay(done) { idx = 0; playing = true; last = 0; holdUntil = performance.now() + 500; onDone = done || null; },
+    replay(done) { idx = 0; playing = true; last = 0; holdUntil = performance.now() + 1200; onDone = done || null; },
     setSpeed(s) { speed = s; },
     isReady: () => frames.length > 0,
   };

@@ -37,6 +37,8 @@ function baseStyle(imgName) {
       } },
       { id: 'hillshade', type: 'hillshade', source: 'dem', paint: {
         'hillshade-exaggeration': 0.38,
+        'hillshade-illumination-anchor': 'map',
+        'hillshade-illumination-direction': 315,
         'hillshade-shadow-color': '#162a20',
         'hillshade-highlight-color': '#d8d1b4',
         'hillshade-accent-color': '#416044',
@@ -254,11 +256,12 @@ function boot() {
   try { map.setTerrain({ source: 'dem', exaggeration: relief }); } catch (e) { console.warn('terrain:', e); }
   try {
     map.setSky({
-      'sky-color': '#0d2430', 'horizon-color': '#3d6b5c', 'fog-color': '#2b3f3a',
-      'sky-horizon-blend': 0.6, 'horizon-fog-blend': 0.5, 'fog-ground-blend': 0.4, 'atmosphere-blend': 0.7,
+      'sky-color': '#7fa8b7', 'horizon-color': '#d8c9a8', 'fog-color': '#aeb9aa',
+      'sky-horizon-blend': 0.72, 'horizon-fog-blend': 0.62,
+      'fog-ground-blend': 0.28, 'atmosphere-blend': 0.82,
     });
   } catch (e) { console.warn('sky:', e); }
-  try { map.setLight({ anchor: 'map', color: '#fff2df', intensity: 0.55, position: [1.4, 210, 30] }); } catch (e) { console.warn('light:', e); }
+  try { map.setLight({ anchor: 'map', color: '#fff0d2', intensity: 0.7, position: [1.5, 315, 38] }); } catch (e) { console.warn('light:', e); }
 
   const shimmer = () => {
     if (map.getLayer('water-fill')) {
