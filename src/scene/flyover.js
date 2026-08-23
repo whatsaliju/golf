@@ -25,6 +25,14 @@ export function buildFrames(hole, opts = {}) {
   const N = opts.flightSamples ?? 240;
   const lengthM = (hole.yardage || 400) * 0.9144;
 
+  // A flyover should begin over the tee, not show the whole property. MapLibre's
+  // pitched camera gets much farther from its center as pitch increases, so the
+  // previous combination of zoom 17 and pitch 72 still put the eye hundreds of
+  // feet away. Keep the camera at a drone-scale zoom and use a moderate pitch so
+  // the ground fills the viewport throughout the trip.
+  const zTravel = clamp(19.35 - Math.log2(Math.max(lengthM, 180) / 360) * 0.08, 19.15, 19.45);
+  const zGreen = zTravel + 0.25;
+  const startAGL = clamp(lengthM * 0.055, 24, 38), endAGL = 14; // HUD readout only
   // Stay close enough to see individual golf features. The old 14.4 travel zoom
   // framed almost the entire course and read like a satellite view rather than
   // a flyover. A small zoom change now simulates a steady low-altitude chase.
@@ -42,12 +50,15 @@ export function buildFrames(hole, opts = {}) {
     frames.push({
       center: catmullRom(cl, e), // sweeps tee → green along the play line
       bearing: dirAt(e),
+      pitch: lerp(48, 58, e),
       pitch: lerp(72, 76, e),
       zoom: lerp(zTravel, zGreen, e),
       agl: lerp(startAGL, endAGL, e),
     });
   }
 
+  // Stop over the green. Rotating around a stationary center reads as a map
+  // spin, not flight, and made the camera appear to climb after the approach.
   // Finish with a short reveal instead of spinning a full revolution. Keep the
   // same altitude as the arrival so the HUD and camera do not jump upward.
   const orbit = opts.orbitSamples ?? 45;
