@@ -27,8 +27,20 @@ function baseStyle(imgName) {
     },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': '#0b1512' } },
-      { id: 'sat', type: 'raster', source: 'sat', paint: { 'raster-fade-duration': 200 } },
-      { id: 'hillshade', type: 'hillshade', source: 'dem', paint: { 'hillshade-exaggeration': 0.5, 'hillshade-shadow-color': '#12261c' } },
+      { id: 'sat', type: 'raster', source: 'sat', paint: {
+        'raster-fade-duration': 120,
+        'raster-resampling': 'linear',
+        'raster-saturation': 0.12,
+        'raster-contrast': 0.1,
+        'raster-brightness-min': 0.04,
+        'raster-brightness-max': 0.96,
+      } },
+      { id: 'hillshade', type: 'hillshade', source: 'dem', paint: {
+        'hillshade-exaggeration': 0.38,
+        'hillshade-shadow-color': '#162a20',
+        'hillshade-highlight-color': '#d8d1b4',
+        'hillshade-accent-color': '#416044',
+      } },
     ],
     sky: {},
   };
@@ -98,14 +110,14 @@ function addOverlays(geo, ctx, hole) {
     'circle-radius': 3, 'circle-color': '#3f7a3f', 'circle-opacity': 0.85 } });
   map.addLayer({ id: 'water-fill', type: 'fill', source: 'water', paint: { 'fill-color': '#2b6ca3', 'fill-opacity': 0.45 } });
   map.addLayer({ id: 'water-line', type: 'line', source: 'water', paint: { 'line-color': '#8ecbff', 'line-width': 1.2, 'line-opacity': 0.7 } });
-  map.addLayer({ id: 'fairway-fill', type: 'fill', source: 'fairways', paint: { 'fill-color': '#63b356', 'fill-opacity': 0.12 } });
-  map.addLayer({ id: 'fairway-line', type: 'line', source: 'fairways', paint: { 'line-color': '#9be08a', 'line-width': 1, 'line-opacity': 0.5 } });
+  map.addLayer({ id: 'fairway-fill', type: 'fill', source: 'fairways', paint: { 'fill-color': '#72b968', 'fill-opacity': 0.08 } });
+  map.addLayer({ id: 'fairway-line', type: 'line', source: 'fairways', paint: { 'line-color': '#b2dda5', 'line-width': 0.8, 'line-opacity': 0.32 } });
   map.addLayer({ id: 'bunker-fill', type: 'fill', source: 'bunkers', paint: { 'fill-color': '#e6d3a3', 'fill-opacity': 0.5 } });
   map.addLayer({ id: 'bunker-line', type: 'line', source: 'bunkers', paint: { 'line-color': '#f0e4c0', 'line-width': 1, 'line-opacity': 0.8 } });
-  map.addLayer({ id: 'green-fill', type: 'fill', source: 'greens', paint: { 'fill-color': '#6aab5f', 'fill-opacity': 0.35 } });
+  map.addLayer({ id: 'green-fill', type: 'fill', source: 'greens', paint: { 'fill-color': '#78c36d', 'fill-opacity': 0.24 } });
   map.addLayer({ id: 'green-line', type: 'line', source: 'greens', paint: { 'line-color': '#bfffb0', 'line-width': 1.5 } });
   map.addLayer({ id: 'tee-line', type: 'line', source: 'tees', paint: { 'line-color': '#eef2ee', 'line-width': 1.2, 'line-opacity': 0.8 } });
-  map.addLayer({ id: 'centerline', type: 'line', source: 'centerline', paint: { 'line-color': '#e8a355', 'line-width': 2, 'line-dasharray': [2, 2], 'line-opacity': 0.85 } });
+  map.addLayer({ id: 'centerline', type: 'line', source: 'centerline', paint: { 'line-color': '#f2bc72', 'line-width': 1.4, 'line-dasharray': [2, 3], 'line-opacity': 0.58 } });
   map.addLayer({ id: 'pin', type: 'circle', source: 'pin', paint: { 'circle-radius': 6, 'circle-color': '#c0392b', 'circle-stroke-color': '#fff', 'circle-stroke-width': 2 } });
   map.addLayer({ id: 'teept', type: 'circle', source: 'teePoint', paint: { 'circle-radius': 5, 'circle-color': '#eef2ee', 'circle-stroke-color': '#1a2a1e', 'circle-stroke-width': 1.5 } });
   // 3D flagstick at the pin

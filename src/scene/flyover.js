@@ -38,9 +38,10 @@ export function buildFrames(hole, opts = {}) {
   const N = opts.flightSamples ?? 240;
   const lengthM = (hole.yardage || 400) * 0.9144;
   const viewportHeight = opts.viewportHeight ?? 900;
-  // High enough to keep the fairway route visible, but still well below the old
-  // course-wide view. Longer holes get a little more opening height.
-  const startAGL = clamp(lengthM * 0.09, 65, 85), endAGL = 45;
+  // A golf-hole establishing pass is more useful around 160–220 ft than at the
+  // previous 65–85 ft: it keeps the tee, landing area, hazards, and green in
+  // context while remaining far below a course-wide aerial view.
+  const startAGL = clamp(lengthM * 0.42, 160, 220), endAGL = 110;
 
   // Local travel direction (look down the hole); stable near the endpoints.
   const dirAt = (e) => bearingOf(catmullRom(cl, Math.max(e - 0.05, 0)), catmullRom(cl, Math.min(e + 0.05, 1)));
@@ -50,7 +51,7 @@ export function buildFrames(hole, opts = {}) {
     const t = i / N;
     const e = easeInOut(t); // smooth accel out of the tee, decel into the green
     const center = catmullRom(cl, e);
-    const pitch = lerp(50, 57, e);
+    const pitch = lerp(48, 55, e);
     const agl = lerp(startAGL, endAGL, e);
     frames.push({
       center, // sweeps tee → green along the play line

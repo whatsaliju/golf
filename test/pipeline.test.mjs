@@ -111,12 +111,12 @@ test('flyover follows the hole route at a readable drone height', () => {
   assert.equal(frames.length, 41, 'there must be no stationary orbit appended to the flight');
   assert.ok(haversineMeters(frames[0].center, [-87.72, 43.85]) < 2);
   assert.ok(haversineMeters(arrival.center, green) < 2);
-  assert.ok(frames.every((frame) => frame.zoom > 20 && frame.zoom < 23), 'camera must remain at drone scale');
-  assert.ok(frames.every((frame) => frame.pitch >= 50 && frame.pitch <= 57));
-  assert.ok(frames.every((frame) => frame.agl >= 45 && frame.agl <= 85));
+  assert.ok(frames.every((frame) => frame.zoom > 19 && frame.zoom < 22), 'camera must retain full-hole context');
+  assert.ok(frames.every((frame) => frame.pitch >= 48 && frame.pitch <= 55));
+  assert.ok(frames.every((frame) => frame.agl >= 110 && frame.agl <= 220));
   assert.ok(frames.slice(1).every((frame, i) => frame.center[1] >= frames[i].center[1]),
     'camera must advance along the tee-to-green route');
-  assert.equal(arrival.agl, 45, 'flight must finish over the green');
+  assert.equal(arrival.agl, 110, 'flight must finish over the green');
 });
 
 test('parseContext + contextToGeoJSON classify buildings/canopy/trees', () => {
