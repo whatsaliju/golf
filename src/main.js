@@ -76,7 +76,7 @@ const OVERLAY_IDS = [
   'flagstick-3d',
 ];
 const SOURCE_IDS = ['fairways', 'greens', 'bunkers', 'water', 'tees', 'centerline', 'pin', 'teePoint',
-  'buildings', 'canopy', 'ctxTrees', 'flagstick'];
+  'buildings', 'canopy', 'ctxTrees', 'treeModels', 'flagstick'];
 
 function clearOverlays() {
   pinMarker?.remove();
@@ -98,6 +98,7 @@ function addOverlays(geo, ctx, hole) {
   map.addSource('buildings', { type: 'geojson', data: ctx.buildings });
   map.addSource('canopy', { type: 'geojson', data: ctx.canopy });
   map.addSource('ctxTrees', { type: 'geojson', data: ctx.trees });
+  map.addSource('treeModels', { type: 'geojson', data: ctx.treeModels });
   map.addSource('flagstick', { type: 'geojson', data: {
     type: 'FeatureCollection',
     features: [{ type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [squareAround(hole.greenCenter, 0.25)] } }],
@@ -110,6 +111,13 @@ function addOverlays(geo, ctx, hole) {
   map.addLayer({ id: 'buildings-3d', type: 'fill-extrusion', source: 'buildings', paint: {
     'fill-extrusion-color': '#c9c3b6', 'fill-extrusion-height': ['get', 'height'],
     'fill-extrusion-base': ['get', 'minHeight'], 'fill-extrusion-opacity': 0.95,
+    'fill-extrusion-vertical-gradient': true } });
+  map.addLayer({ id: 'tree-trunks-3d', type: 'fill-extrusion', source: 'treeModels', paint: {
+    'fill-extrusion-color': '#60452d', 'fill-extrusion-base': 0,
+    'fill-extrusion-height': ['get', 'trunkTop'], 'fill-extrusion-opacity': 0.95 } });
+  map.addLayer({ id: 'tree-crowns-3d', type: 'fill-extrusion', source: 'treeModels', paint: {
+    'fill-extrusion-color': '#39723c', 'fill-extrusion-base': ['get', 'trunkTop'],
+    'fill-extrusion-height': ['get', 'crownTop'], 'fill-extrusion-opacity': 0.9,
     'fill-extrusion-vertical-gradient': true } });
   map.addLayer({ id: 'trees', type: 'circle', source: 'ctxTrees', paint: {
     'circle-radius': 3, 'circle-color': '#3f7a3f', 'circle-opacity': 0.85 } });
@@ -181,7 +189,9 @@ async function present(i) {
   if (data.loadContext) {
     data.loadContext().then((ctx) => {
       if (!ctx || data !== current) return; // ignore if the user switched holes
-      for (const [srcId, key] of [['buildings', 'buildings'], ['canopy', 'canopy'], ['ctxTrees', 'trees']]) {
+      for (const [srcId, key] of [
+        ['buildings', 'buildings'], ['canopy', 'canopy'], ['ctxTrees', 'trees'], ['treeModels', 'treeModels'],
+      ]) {
         const s = map.getSource(srcId);
         if (s) s.setData(ctx[key]);
       }

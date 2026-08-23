@@ -137,6 +137,8 @@ test('parseContext + contextToGeoJSON classify buildings/canopy/trees', () => {
   const gj = contextToGeoJSON(ctx);
   assert.equal(gj.buildings.features[0].properties.height, ctx.buildings[0].height);
   assert.equal(gj.trees.features[0].geometry.type, 'Point');
+  assert.equal(gj.treeModels.features[0].geometry.type, 'Polygon');
+  assert.equal(gj.treeModels.features[0].properties.crownTop, 11);
 });
 
 test('holeToGeoJSON produces valid closed polygons + linestring', () => {
