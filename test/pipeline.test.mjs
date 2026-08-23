@@ -98,6 +98,7 @@ test('assembleHole computes real yardage, orientation and elevation', () => {
 });
 
 test('flyover starts over the tee, stays at drone scale, and stops over the green', () => {
+test('flyover stays low, follows tee to green, and avoids a high spin', () => {
   const green = [-87.72, greenLat];
   const hole = {
     yardage: 394,
@@ -115,6 +116,16 @@ test('flyover starts over the tee, stays at drone scale, and stops over the gree
   assert.ok(frames.every((frame) => frame.pitch >= 48 && frame.pitch <= 58));
   assert.ok(frames.every((frame) => frame.agl <= 38), 'HUD altitude must remain low');
   assert.equal(arrival.agl, 14, 'flight must finish low over the green');
+  const frames = buildFrames(hole, { flightSamples: 40, orbitSamples: 10 });
+  const arrival = frames[40];
+  const finish = frames.at(-1);
+
+  assert.ok(haversineMeters(frames[0].center, [-87.72, 43.85]) < 2);
+  assert.ok(haversineMeters(arrival.center, green) < 2);
+  assert.ok(frames.every((frame) => frame.zoom >= 16.8), 'camera must stay close to the hole');
+  assert.ok(frames.every((frame) => frame.agl <= 68), 'HUD altitude must remain low');
+  assert.equal(finish.agl, arrival.agl, 'finish must not jump upward');
+  assert.ok(finish.bearing - arrival.bearing <= 65.01, 'finish reveal must not spin around the green');
 });
 
 test('parseContext + contextToGeoJSON classify buildings/canopy/trees', () => {
