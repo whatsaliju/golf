@@ -42,6 +42,7 @@ const map = new maplibregl.Map({
   style: baseStyle(firstCourse.imagerySource),
   center: [cx, cy],
   zoom: 15,
+  maxZoom: 24, // low-AGL flyover overzooms imagery while preserving terrain/geometry
   pitch: 65,
   maxPitch: 85,
   antialias: true,
