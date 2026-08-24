@@ -40,10 +40,10 @@ export function buildFrames(hole, opts = {}) {
   const N = opts.flightSamples ?? 240;
   const lengthM = (hole.yardage || 400) * 0.9144;
   const viewportHeight = opts.viewportHeight ?? 900;
-  // A golf-hole establishing pass is more useful around 160–220 ft than at the
-  // previous 65–85 ft: it keeps the tee, landing area, hazards, and green in
-  // context while remaining far below a course-wide aerial view.
-  const startAGL = clamp(lengthM * 0.42, 160, 220), endAGL = 110;
+  // Descend from a brief establishing height down onto the fairway. A low pass
+  // (~45 ft) with a shallow, forward-looking angle is what reads as "flying down
+  // the hole" rather than hovering and looking straight down.
+  const startAGL = clamp(lengthM * 0.35, 120, 170), endAGL = 45;
 
   // Local travel direction (look down the hole); stable near the endpoints.
   const dirAt = (e) => bearingOf(catmullRom(cl, Math.max(e - 0.05, 0)), catmullRom(cl, Math.min(e + 0.05, 1)));
@@ -53,7 +53,9 @@ export function buildFrames(hole, opts = {}) {
     const t = i / N;
     const e = easeInOut(t); // smooth accel out of the tee, decel into the green
     const center = catmullRom(cl, e);
-    const pitch = lerp(48, 55, e);
+    // Pitch rises into a shallow forward-looking cruise (~74°) mid-flight, then
+    // settles (~64°) to look onto the green on arrival.
+    const pitch = 58 + 16 * Math.sin(Math.min(e, 1) * Math.PI * 0.85);
     const agl = lerp(startAGL, endAGL, e);
     frames.push({
       center, // sweeps tee → green along the play line
