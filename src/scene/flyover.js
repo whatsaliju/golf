@@ -47,8 +47,17 @@ export function buildFrames(hole, opts = {}) {
   // hovering and looking straight down.
   const startAGL = clamp(lengthM * 0.35, 120, 170), endAGL = 65;
 
-  // Local travel direction (look down the hole); stable near the endpoints.
-  const dirAt = (e) => bearingOf(catmullRom(cl, Math.max(e - 0.05, 0)), catmullRom(cl, Math.min(e + 0.05, 1)));
+  // Aim DOWN the fairway: look from the current point to one a bit further along
+  // the route, so the fairway ahead stays in frame and the camera only swings to
+  // face the pin in the final stretch (where the look-ahead reaches the green).
+  // Near the very end the two samples converge, so fall back to a short centred
+  // difference to keep the heading stable.
+  const LOOKAHEAD = 0.14;
+  const dirAt = (e) => {
+    const b1 = Math.min(e + LOOKAHEAD, 1);
+    if (b1 - e > 0.02) return bearingOf(catmullRom(cl, e), catmullRom(cl, b1));
+    return bearingOf(catmullRom(cl, Math.max(1 - 0.06, 0)), catmullRom(cl, 1));
+  };
 
   const frames = [];
   for (let i = 0; i <= N; i++) {
