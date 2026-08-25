@@ -71,7 +71,7 @@ const flyover = createFlyover(map, hud);
 // ---- hole overlay layers ----------------------------------------------------
 const OVERLAY_IDS = [
   'buildings-3d', 'canopy-3d', 'tree-trunks-3d', 'tree-crowns-3d', 'trees',
-  'water-fill', 'water-line', 'fairway-fill', 'fairway-line',
+  'water-fill', 'water-line', 'fairway-fill', 'fairway-casing', 'fairway-line',
   'bunker-fill', 'bunker-line', 'green-fill', 'green-line', 'tee-fill', 'tee-line', 'centerline', 'pin', 'teept',
   'flagstick-3d',
 ];
@@ -141,9 +141,16 @@ function addOverlays(geo, ctx, hole) {
     'circle-radius': 3, 'circle-color': '#3f7a3f', 'circle-opacity': 0.85 } });
   map.addLayer({ id: 'water-fill', type: 'fill', source: 'water', paint: { 'fill-color': '#2b6ca3', 'fill-opacity': 0.45 } });
   map.addLayer({ id: 'water-line', type: 'line', source: 'water', paint: { 'line-color': '#8ecbff', 'line-width': 1.2, 'line-opacity': 0.7 } });
-  map.addLayer({ id: 'fairway-fill', type: 'fill', source: 'fairways', paint: { 'fill-color': '#72c565', 'fill-opacity': 0.19 } });
-  map.addLayer({ id: 'fairway-line', type: 'line', source: 'fairways', paint: {
-    'line-color': '#c5f2b8', 'line-width': 1.6, 'line-opacity': 0.68, 'line-blur': 0.25 } });
+  map.addLayer({ id: 'fairway-fill', type: 'fill', source: 'fairways', paint: { 'fill-color': '#72c565', 'fill-opacity': 0.2 } });
+  // Crisp fairway outline so its shape reads clearly on the satellite imagery: a
+  // dark casing under a bright edge, both scaled with zoom so the border stays
+  // legible from the establishing height down to the low flyover pass.
+  map.addLayer({ id: 'fairway-casing', type: 'line', source: 'fairways', layout: { 'line-join': 'round' }, paint: {
+    'line-color': '#183a22', 'line-opacity': 0.6, 'line-blur': 0.3,
+    'line-width': ['interpolate', ['linear'], ['zoom'], 13, 2.6, 17, 5, 20, 8, 22, 10] } });
+  map.addLayer({ id: 'fairway-line', type: 'line', source: 'fairways', layout: { 'line-join': 'round' }, paint: {
+    'line-color': '#eaffdf', 'line-opacity': 0.95,
+    'line-width': ['interpolate', ['linear'], ['zoom'], 13, 1.2, 17, 2.4, 20, 4.2, 22, 5.5] } });
   map.addLayer({ id: 'bunker-fill', type: 'fill', source: 'bunkers', paint: { 'fill-color': '#e6d3a3', 'fill-opacity': 0.5 } });
   map.addLayer({ id: 'bunker-line', type: 'line', source: 'bunkers', paint: { 'line-color': '#f0e4c0', 'line-width': 1, 'line-opacity': 0.8 } });
   map.addLayer({ id: 'green-fill', type: 'fill', source: 'greens', paint: { 'fill-color': '#72dc69', 'fill-opacity': 0.34 } });
