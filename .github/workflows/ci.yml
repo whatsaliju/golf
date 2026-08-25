@@ -24,6 +24,8 @@ jobs:
           count=$(ls public/holes/*.json 2>/dev/null | wc -l)
           echo "Baked $count hole JSON file(s)"
           test "$count" -ge 1
+      - name: RECON new course bboxes (temporary)
+        run: node scripts/recon.mjs
       - run: npm run build
         env:
           VITE_BASE: ./
