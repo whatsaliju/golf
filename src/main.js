@@ -82,7 +82,7 @@ const flyover = createFlyover(map, hud);
 const OVERLAY_IDS = [
   'buildings-3d', 'canopy-3d', 'tree-trunks-3d', 'tree-crowns-3d', 'trees',
   'water-fill', 'water-line', 'fairway-fill', 'fairway-casing', 'fairway-line',
-  'bunker-fill', 'bunker-line', 'green-fill', 'green-line', 'tee-fill', 'tee-line', 'centerline', 'pin', 'teept',
+  'bunker-fill', 'bunker-casing', 'bunker-line', 'green-fill', 'green-line', 'tee-fill', 'tee-line', 'centerline', 'pin', 'teept',
   'flagstick-3d',
 ];
 const SOURCE_IDS = ['fairways', 'greens', 'bunkers', 'water', 'tees', 'centerline', 'pin', 'teePoint',
@@ -161,8 +161,15 @@ function addOverlays(geo, ctx, hole) {
   map.addLayer({ id: 'fairway-line', type: 'line', source: 'fairways', layout: { 'line-join': 'round' }, paint: {
     'line-color': '#eaffdf', 'line-opacity': 0.95,
     'line-width': ['interpolate', ['linear'], ['zoom'], 13, 1.2, 17, 2.4, 20, 4.2, 22, 5.5] } });
-  map.addLayer({ id: 'bunker-fill', type: 'fill', source: 'bunkers', paint: { 'fill-color': '#e6d3a3', 'fill-opacity': 0.5 } });
-  map.addLayer({ id: 'bunker-line', type: 'line', source: 'bunkers', paint: { 'line-color': '#f0e4c0', 'line-width': 1, 'line-opacity': 0.8 } });
+  map.addLayer({ id: 'bunker-fill', type: 'fill', source: 'bunkers', paint: { 'fill-color': '#e4cd94', 'fill-opacity': 0.58 } });
+  // A dark, soft casing reads as the recessed lip of the bunker; a bright thin
+  // line on top is the sunlit sand rim — together they give the sand depth.
+  map.addLayer({ id: 'bunker-casing', type: 'line', source: 'bunkers', layout: { 'line-join': 'round' }, paint: {
+    'line-color': '#6f5a30', 'line-opacity': 0.6, 'line-blur': 0.8,
+    'line-width': ['interpolate', ['linear'], ['zoom'], 14, 1.6, 18, 4, 21, 7] } });
+  map.addLayer({ id: 'bunker-line', type: 'line', source: 'bunkers', layout: { 'line-join': 'round' }, paint: {
+    'line-color': '#fbf1cf', 'line-opacity': 0.9,
+    'line-width': ['interpolate', ['linear'], ['zoom'], 14, 0.8, 18, 1.8, 21, 3] } });
   map.addLayer({ id: 'green-fill', type: 'fill', source: 'greens', paint: { 'fill-color': '#72dc69', 'fill-opacity': 0.34 } });
   map.addLayer({ id: 'green-line', type: 'line', source: 'greens', paint: { 'line-color': '#d7ffd0', 'line-width': 2.4, 'line-opacity': 0.95 } });
   map.addLayer({ id: 'tee-fill', type: 'fill', source: 'tees', paint: { 'fill-color': '#d8ffd0', 'fill-opacity': 0.3 } });
@@ -312,9 +319,9 @@ function boot() {
   try { map.setTerrain({ source: 'dem', exaggeration: relief }); } catch (e) { console.warn('terrain:', e); }
   try {
     map.setSky({
-      'sky-color': '#83aec6', 'horizon-color': '#e7d0a6', 'fog-color': '#c8cdbe',
-      'sky-horizon-blend': 0.7, 'horizon-fog-blend': 0.55,
-      'fog-ground-blend': 0.34, 'atmosphere-blend': 0.72,
+      'sky-color': '#83aec6', 'horizon-color': '#ecd6ac', 'fog-color': '#d2d6c9',
+      'sky-horizon-blend': 0.7, 'horizon-fog-blend': 0.7,
+      'fog-ground-blend': 0.5, 'atmosphere-blend': 0.85,
     });
   } catch (e) { console.warn('sky:', e); }
   // Warm, low afternoon sun (30° above the horizon) for long turf shadows.

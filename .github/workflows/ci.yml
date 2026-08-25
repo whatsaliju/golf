@@ -24,21 +24,6 @@ jobs:
           count=$(ls public/holes/*.json 2>/dev/null | wc -l)
           echo "Baked $count hole JSON file(s)"
           test "$count" -ge 1
-      - name: DIAGNOSE all holes — fairway + green-arrival (temporary)
-        run: |
-          node --input-type=module -e "
-          import { readFileSync, readdirSync } from 'node:fs';
-          const R=6371008.8, D=Math.PI/180;
-          const hav=(a,b)=>{const dLat=(b[1]-a[1])*D,dLon=(b[0]-a[0])*D,la1=a[1]*D,la2=b[1]*D;
-            const h=Math.sin(dLat/2)**2+Math.cos(la1)*Math.cos(la2)*Math.sin(dLon/2)**2;return 2*R*Math.asin(Math.sqrt(h));};
-          for (const f of readdirSync('./public/holes').filter(x=>x.endsWith('.json')).sort()) {
-            const h=JSON.parse(readFileSync('./public/holes/'+f,'utf8')).hole;
-            const clEnd=hav(h.centerline[h.centerline.length-1], h.greenCenter);
-            const rtEnd=hav(h.route[h.route.length-1], h.greenCenter);
-            console.log(f.padEnd(12), 'fairways',h.fairwayRings.length, 'synthetic',!!h.syntheticFairway,
-              '| clEndGap',clEnd.toFixed(1)+'m', 'routeEndGap',rtEnd.toFixed(1)+'m', '| '+h.yardage+'yd');
-          }
-          "
       - run: npm run build
         env:
           VITE_BASE: ./
