@@ -52,7 +52,7 @@ export function buildFrames(hole, opts = {}) {
   // face the pin in the final stretch (where the look-ahead reaches the green).
   // Near the very end the two samples converge, so fall back to a short centred
   // difference to keep the heading stable.
-  const LOOKAHEAD = 0.14;
+  const LOOKAHEAD = 0.09;
   const dirAt = (e) => {
     const b1 = Math.min(e + LOOKAHEAD, 1);
     if (b1 - e > 0.02) return bearingOf(catmullRom(cl, e), catmullRom(cl, b1));

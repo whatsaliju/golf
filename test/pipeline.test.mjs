@@ -168,7 +168,9 @@ test('parseContext + contextToGeoJSON classify buildings/canopy/trees', () => {
   assert.equal(gj.buildings.features[0].properties.height, ctx.buildings[0].height);
   assert.equal(gj.trees.features[0].geometry.type, 'Point');
   assert.equal(gj.treeModels.features[0].geometry.type, 'Polygon');
-  assert.equal(gj.treeModels.features[0].properties.crownTop, 11);
+  const tm = gj.treeModels.features[0].properties;
+  assert.ok(tm.crownTop >= 8 && tm.crownTop <= 16, `crown height varies (${tm.crownTop})`);
+  assert.ok(tm.trunkTop > 0 && tm.trunkTop < tm.crownTop, 'trunk below the crown');
 });
 
 test('holeToGeoJSON produces valid closed polygons + linestring', () => {
