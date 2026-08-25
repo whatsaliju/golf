@@ -39,11 +39,19 @@ export function contextToGeoJSON(ctx) {
   const trees = fc(
     (ctx.trees || []).map((p) => ({ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: p } }))
   );
+  // Vary height and crown per tree (deterministic hash of its position) so the
+  // canopy reads as a real stand of trees, not a field of identical clones.
   const treeModels = fc(
-    (ctx.trees || []).map((p) => ({
-      type: 'Feature', properties: { trunkTop: 6, crownTop: 11 },
-      geometry: { type: 'Polygon', coordinates: [squareMeters(p, 1.25)] },
-    }))
+    (ctx.trees || []).map((p, i) => {
+      const h = Math.abs(Math.sin(p[0] * 91.7 + p[1] * 57.3 + i * 0.7)) % 1; // 0..1
+      const crownTop = +(8 + h * 8).toFixed(2);      // 8–16 m tall
+      const trunkTop = +(crownTop * 0.42).toFixed(2);
+      const radius = 1.0 + h * 0.9;                  // 1.0–1.9 m crown
+      return {
+        type: 'Feature', properties: { trunkTop, crownTop },
+        geometry: { type: 'Polygon', coordinates: [squareMeters(p, radius)] },
+      };
+    })
   );
   return { buildings, canopy, trees, treeModels };
 }

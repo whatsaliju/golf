@@ -96,7 +96,21 @@ export function fairwaySpine(centerline, fairwayRings) {
     const a = atS(s);
     spine.push(toLL([a.p[0] + a.nx * d, a.p[1] + a.ny * d]));
   }
-  spine.push(centerline[centerline.length - 1]);
+
+  // Hold the fairway heading toward the green, then turn to the pin only at the
+  // very end. Continue along the last fairway bearing for most of the remaining
+  // gap before the final segment cuts in to the green — so the flight runs out
+  // down the fairway and turns late, instead of curving at the pin from further
+  // back. Bounded (stays on the fairway heading), so it can't wildly overshoot.
+  const end = centerline[centerline.length - 1];
+  if (spine.length >= 3) {
+    const A = toXY(spine[spine.length - 2]), B = toXY(spine[spine.length - 1]), E = toXY(end);
+    let hx = B[0] - A[0], hy = B[1] - A[1];
+    const hl = Math.hypot(hx, hy) || 1; hx /= hl; hy /= hl;
+    const proj = (E[0] - B[0]) * hx + (E[1] - B[1]) * hy; // along-fairway gap to the green
+    if (proj > 5) spine.push(toLL([B[0] + hx * proj * 0.6, B[1] + hy * proj * 0.6]));
+  }
+  spine.push(end);
   return spine.length >= 3 ? spine : null;
 }
 
