@@ -202,7 +202,15 @@ export function assembleHole(parsed, ref, sampleElevation) {
   const tees = teeByRef.length ? teeByRef : parsed.tees.filter(near);
 
   // Camera route that hugs the fairway through bends (falls back to play line).
-  const route = fairwaySpine(centerline, fairways.map((f) => f.ring)) || centerline;
+  let route = fairwaySpine(centerline, fairways.map((f) => f.ring)) || centerline;
+
+  // Finish the route AT the green centre (the pin), not at the play line's end.
+  // OSM play lines often stop at the front of the green or a little short, which
+  // left the flight ending short of / beside the green — most visible on long
+  // holes. Extend to the green so the flyover always arrives over the pin.
+  if (greenCenter && dist(route[route.length - 1], greenCenter) > 5) {
+    route = [...route, greenCenter];
+  }
 
   // Fairway polygons to draw: the real OSM ones when present, otherwise a
   // synthesized corridor so the fairway is visible and the flight has a shape
