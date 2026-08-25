@@ -29,9 +29,11 @@ function zoomForAGL([, lat], aglFt, pitch, viewportHeight) {
 }
 
 export function buildFrames(hole, opts = {}) {
-  // Orient the play line so the flight always ENDS at the green, regardless of
-  // how the OSM hole line happened to be stored (tee→green or green→tee).
-  const cl = hole.centerline.slice();
+  // Fly the fairway-following route when the hole model built one; otherwise the
+  // straight OSM play line. Orient it so the flight always ENDS at the green,
+  // regardless of how the source line happened to be stored (tee→green or the
+  // reverse).
+  const cl = (hole.route || hole.centerline).slice();
   const green = hole.greenCenter;
   if (cl.length >= 2 && haversineMeters(cl[0], green) < haversineMeters(cl[cl.length - 1], green)) {
     cl.reverse();
@@ -40,10 +42,10 @@ export function buildFrames(hole, opts = {}) {
   const N = opts.flightSamples ?? 240;
   const lengthM = (hole.yardage || 400) * 0.9144;
   const viewportHeight = opts.viewportHeight ?? 900;
-  // Descend from a brief establishing height down onto the fairway. A low pass
-  // (~45 ft) with a shallow, forward-looking angle is what reads as "flying down
-  // the hole" rather than hovering and looking straight down.
-  const startAGL = clamp(lengthM * 0.35, 120, 170), endAGL = 45;
+  // Descend from a brief establishing height down onto the fairway, then cruise.
+  // A low, forward-looking pass reads as "flying down the hole" rather than
+  // hovering and looking straight down.
+  const startAGL = clamp(lengthM * 0.35, 120, 170), endAGL = 65;
 
   // Local travel direction (look down the hole); stable near the endpoints.
   const dirAt = (e) => bearingOf(catmullRom(cl, Math.max(e - 0.05, 0)), catmullRom(cl, Math.min(e + 0.05, 1)));
@@ -56,7 +58,10 @@ export function buildFrames(hole, opts = {}) {
     // Pitch rises into a shallow forward-looking cruise (~74°) mid-flight, then
     // settles (~64°) to look onto the green on arrival.
     const pitch = 58 + 16 * Math.sin(Math.min(e, 1) * Math.PI * 0.85);
-    const agl = lerp(startAGL, endAGL, e);
+    // Get low early and cruise: reach the low altitude by mid-flight, then hold
+    // it down the back half instead of easing down the whole way.
+    const descend = easeInOut(clamp(e / 0.5, 0, 1));
+    const agl = lerp(startAGL, endAGL, descend);
     frames.push({
       center, // sweeps tee → green along the play line
       bearing: dirAt(e),
@@ -75,7 +80,7 @@ export function createFlyover(map, hud) {
   let frames = [], hole = null, idx = 0, playing = false, speed = 1, raf = null, last = 0;
   let onDone = null;
   let holdUntil = 0;
-  const PACE = 0.48; // deliberate enough to read hazards and the intended route
+  const PACE = 0.36; // slow, deliberate — time to read hazards and the route
 
   function apply(frame) {
     try {

@@ -8,7 +8,7 @@ import {
   haversineMeters, pathLengthMeters, centroid, pointInRing, bearing, catmullRom, bboxOf,
 } from '../src/data/geo.js';
 import { parseOverpass, filterToCourse, parseContext } from '../src/data/overpass.js';
-import { assembleHole } from '../src/data/holeModel.js';
+import { assembleHole, fairwaySpine } from '../src/data/holeModel.js';
 import { holeToGeoJSON, contextToGeoJSON } from '../src/data/holeGeoJSON.js';
 import { buildFrames } from '../src/scene/flyover.js';
 
@@ -118,7 +118,27 @@ test('flyover follows the hole route at a readable drone height', () => {
     'opening must accelerate gently away from the tee');
   assert.ok(frames.slice(1).every((frame, i) => frame.center[1] >= frames[i].center[1]),
     'camera must advance along the tee-to-green route');
-  assert.equal(arrival.agl, 45, 'flight must finish low over the green');
+  assert.equal(arrival.agl, 65, 'flight must finish low over the green');
+});
+
+test('fairwaySpine bends the route toward a curved fairway', () => {
+  const tee = [-87.72, 43.85];
+  const green = [-87.72, 43.854]; // due north
+  // A dogleg-left fairway: the whole corridor (both edges) shifts WEST at the
+  // midpoint, so the fairway's midline bends left of the straight tee→green line.
+  const ring = [
+    [-87.7201, 43.8505], [-87.7206, 43.8515], [-87.7201, 43.8525], // west edge, bending left
+    [-87.7199, 43.8525], [-87.7202, 43.8515], [-87.7199, 43.8505], // east edge, also shifted west
+    [-87.7201, 43.8505],
+  ];
+  const spine = fairwaySpine(tee, green, [ring]);
+  assert.ok(spine, 'a fairway with geometry yields a spine');
+  assert.ok(haversineMeters(spine[0], tee) < 2 && haversineMeters(spine[spine.length - 1], green) < 2,
+    'spine still starts at the tee and ends at the green');
+  // The midpoint of the route must sit west of the straight line, tracking the bend.
+  const mid = spine[Math.floor(spine.length / 2)];
+  assert.ok(mid[0] < -87.72, `route midpoint pulled toward the fairway (${mid[0]})`);
+  assert.equal(fairwaySpine(tee, green, []), null, 'no fairway → keep the straight play line');
 });
 
 test('parseContext + contextToGeoJSON classify buildings/canopy/trees', () => {
