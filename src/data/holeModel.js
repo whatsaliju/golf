@@ -19,51 +19,84 @@ function nearest(point, features) {
  * A fairway-following route between tee and green.
  *
  * The OSM `golf=hole` play line is often drawn straighter than the fairway, so
- * a camera that flies it cuts the corner of a bend. This bends the route toward
- * the fairway's midline: project every fairway-polygon vertex onto the
- * tee→green axis, bin by progress along it, and take the mean perpendicular
- * offset per bin. Both fairway edges shift together through a curve, so their
- * mean tracks the centre of the fairway and the route hugs the turf.
+ * a camera that flies it cuts the corner of a bend. This snaps the route onto
+ * the fairway's midline: measure every fairway-polygon vertex against the play
+ * line by ARC LENGTH along it (not a straight tee→green chord) with a signed
+ * perpendicular offset, bin by progress, and take the mean offset per slice.
+ *
+ * Projecting along the play line's own arc length (with a local normal at each
+ * slice) is what keeps a dogleg honest: a fairway that runs straight and THEN
+ * turns produces near-zero offsets early and a growing offset only past the
+ * corner, so the route holds the line and turns late — instead of the smooth
+ * bow a straight-chord projection produces, which drifts toward the hole from
+ * the tee.
  *
  * Returns null (keep the straight play line) when there isn't enough fairway
  * geometry to trust — a green-only or unmapped hole.
  */
-export function fairwaySpine(tee, green, fairwayRings) {
-  if (!fairwayRings || !fairwayRings.length) return null;
-  const lat0 = (tee[1] + green[1]) / 2;
+export function fairwaySpine(centerline, fairwayRings) {
+  if (!fairwayRings || !fairwayRings.length || !centerline || centerline.length < 2) return null;
+  const lat0 = centerline[Math.floor(centerline.length / 2)][1];
   const mLat = 111320, mLon = 111320 * Math.cos((lat0 * Math.PI) / 180);
   const toXY = ([lon, lat]) => [lon * mLon, lat * mLat];
-  const T = toXY(tee), G = toXY(green);
-  const ax = G[0] - T[0], ay = G[1] - T[1];
-  const L = Math.hypot(ax, ay) || 1;
-  const ux = ax / L, uy = ay / L;   // along tee→green
-  const px = -uy, py = ux;          // perpendicular (left positive)
+  const toLL = ([x, y]) => [x / mLon, y / mLat];
+  const cl = centerline.map(toXY);
 
-  const BINS = 12;
-  const bin = Array.from({ length: BINS }, () => ({ sumD: 0, n: 0 }));
+  // Segments of the play line with cumulative arc length and unit direction.
+  const seg = [];
+  let total = 0;
+  for (let i = 0; i < cl.length - 1; i++) {
+    const dx = cl[i + 1][0] - cl[i][0], dy = cl[i + 1][1] - cl[i][1];
+    const len = Math.hypot(dx, dy) || 1e-9;
+    seg.push({ a: cl[i], ux: dx / len, uy: dy / len, len, s0: total });
+    total += len;
+  }
+  if (total < 1) return null;
+
+  // Nearest point on the play line → { s: arc length, d: signed offset (+left) }.
+  const project = (p) => {
+    let best = null, bestD = Infinity;
+    for (const g of seg) {
+      let t = (p[0] - g.a[0]) * g.ux + (p[1] - g.a[1]) * g.uy;
+      t = Math.max(0, Math.min(g.len, t));
+      const cx = g.a[0] + g.ux * t, cy = g.a[1] + g.uy * t;
+      const dd = Math.hypot(p[0] - cx, p[1] - cy);
+      if (dd < bestD) { bestD = dd; best = { s: g.s0 + t, d: (p[0] - cx) * -g.uy + (p[1] - cy) * g.ux }; }
+    }
+    return best;
+  };
+  // Point + left-normal on the play line at arc length s.
+  const atS = (s) => {
+    s = Math.max(0, Math.min(total, s));
+    let g = seg[0];
+    for (const h of seg) { if (s <= h.s0 + h.len) { g = h; break; } g = h; }
+    const t = s - g.s0;
+    return { p: [g.a[0] + g.ux * t, g.a[1] + g.uy * t], nx: -g.uy, ny: g.ux };
+  };
+
+  const BINS = 16;
+  const bin = Array.from({ length: BINS }, () => ({ sum: 0, n: 0 }));
   let used = 0;
   for (const ring of fairwayRings) {
     for (const c of ring) {
-      const [x, y] = toXY(c);
-      const dx = x - T[0], dy = y - T[1];
-      const s = dx * ux + dy * uy;      // metres along the axis
-      if (s < -25 || s > L + 25) continue;
-      const d = dx * px + dy * py;      // metres off the axis
-      let k = Math.floor((s / L) * BINS);
+      const pr = project(toXY(c));
+      if (!pr || pr.s < -20 || pr.s > total + 20) continue;
+      let k = Math.floor((pr.s / total) * BINS);
       k = Math.max(0, Math.min(BINS - 1, k));
-      bin[k].sumD += d; bin[k].n++; used++;
+      bin[k].sum += pr.d; bin[k].n++; used++;
     }
   }
   if (used < 6) return null;
 
-  const spine = [tee];
+  const spine = [centerline[0]];
   for (let k = 0; k < BINS; k++) {
     if (!bin[k].n) continue;
-    const s = ((k + 0.5) / BINS) * L;
-    const d = bin[k].sumD / bin[k].n;   // fairway midline offset in this slice
-    spine.push([(T[0] + ux * s + px * d) / mLon, (T[1] + uy * s + py * d) / mLat]);
+    const s = ((k + 0.5) / BINS) * total;
+    const d = bin[k].sum / bin[k].n;       // fairway midline offset at this slice
+    const a = atS(s);
+    spine.push(toLL([a.p[0] + a.nx * d, a.p[1] + a.ny * d]));
   }
-  spine.push(green);
+  spine.push(centerline[centerline.length - 1]);
   return spine.length >= 3 ? spine : null;
 }
 
@@ -126,7 +159,7 @@ export function assembleHole(parsed, ref, sampleElevation) {
   const tees = teeByRef.length ? teeByRef : parsed.tees.filter(near);
 
   // Camera route that hugs the fairway through bends (falls back to play line).
-  const route = fairwaySpine(teePt, greenCenter, fairways.map((f) => f.ring)) || centerline;
+  const route = fairwaySpine(centerline, fairways.map((f) => f.ring)) || centerline;
 
   const yardage = Math.round((osmDistM ? osmDistM : pathLengthMeters(centerline)) * M_TO_YD);
 

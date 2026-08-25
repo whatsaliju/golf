@@ -121,24 +121,34 @@ test('flyover follows the hole route at a readable drone height', () => {
   assert.equal(arrival.agl, 65, 'flight must finish low over the green');
 });
 
-test('fairwaySpine bends the route toward a curved fairway', () => {
+test('fairwaySpine follows a dogleg: straight early, turns late', () => {
   const tee = [-87.72, 43.85];
   const green = [-87.72, 43.854]; // due north
-  // A dogleg-left fairway: the whole corridor (both edges) shifts WEST at the
-  // midpoint, so the fairway's midline bends left of the straight tee→green line.
+  const centerline = [tee, green]; // straight OSM play line
+  // A fairway that runs STRAIGHT on the line for the first ~60% (centred on
+  // lon -87.72), then doglegs WEST for the final stretch.
   const ring = [
-    [-87.7201, 43.8505], [-87.7206, 43.8515], [-87.7201, 43.8525], // west edge, bending left
-    [-87.7199, 43.8525], [-87.7202, 43.8515], [-87.7199, 43.8505], // east edge, also shifted west
-    [-87.7201, 43.8505],
+    // west edge, tee → up the straight section → out to the west on the turn
+    [-87.7202, 43.850], [-87.7202, 43.8525], [-87.7208, 43.854],
+    // east edge back down: turn → straight section → tee
+    [-87.7204, 43.854], [-87.7198, 43.8525], [-87.7198, 43.850],
+    [-87.7202, 43.850],
   ];
-  const spine = fairwaySpine(tee, green, [ring]);
+  const spine = fairwaySpine(centerline, [ring]);
   assert.ok(spine, 'a fairway with geometry yields a spine');
   assert.ok(haversineMeters(spine[0], tee) < 2 && haversineMeters(spine[spine.length - 1], green) < 2,
     'spine still starts at the tee and ends at the green');
-  // The midpoint of the route must sit west of the straight line, tracking the bend.
-  const mid = spine[Math.floor(spine.length / 2)];
-  assert.ok(mid[0] < -87.72, `route midpoint pulled toward the fairway (${mid[0]})`);
-  assert.equal(fairwaySpine(tee, green, []), null, 'no fairway → keep the straight play line');
+
+  // Before the corner (lat < 43.853) the route must hug the straight line…
+  const early = spine.filter((p) => p[1] < 43.853);
+  assert.ok(early.length && early.every((p) => Math.abs(p[0] + 87.72) < 0.00015),
+    `route holds the line before the corner (${early.map((p) => (p[0] + 87.72).toFixed(5))})`);
+  // …and only past the corner does the route swing west toward the dogleg.
+  const late = spine.filter((p) => p[1] >= 43.853 && p[1] < 43.8539);
+  assert.ok(late.length && late.some((p) => p[0] < -87.7203),
+    `route turns west only near the green (${late.map((p) => (p[0] + 87.72).toFixed(5))})`);
+
+  assert.equal(fairwaySpine(centerline, []), null, 'no fairway → keep the straight play line');
 });
 
 test('parseContext + contextToGeoJSON classify buildings/canopy/trees', () => {
