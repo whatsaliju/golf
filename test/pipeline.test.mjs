@@ -97,6 +97,20 @@ test('assembleHole computes real yardage, orientation and elevation', () => {
   assert.equal(hole.bunkerRings.length, 1);
 });
 
+test('assembleHole synthesizes a fairway corridor when OSM has none', () => {
+  const noFairway = { elements: fixture.elements.filter((e) => e.tags?.golf !== 'fairway') };
+  const parsed = filterToCourse(parseOverpass(noFairway), 'Whistling Straits');
+  const hole = assembleHole(parsed, '1', null);
+  assert.equal(hole.syntheticFairway, true, 'flag set when no OSM fairway');
+  assert.equal(hole.fairwayRings.length, 1, 'one synthesized corridor');
+  const ring = hole.fairwayRings[0];
+  assert.ok(ring.length > 8, 'corridor is a real ribbon');
+  assert.deepEqual(ring[0], ring[ring.length - 1], 'corridor ring is closed');
+  // A real OSM fairway (the full fixture) must NOT be overwritten.
+  const withFairway = assembleHole(filterToCourse(parseOverpass(fixture), 'Whistling Straits'), '1', null);
+  assert.equal(withFairway.syntheticFairway, false, 'real fairway kept as-is');
+});
+
 test('flyover follows the hole route at a readable drone height', () => {
   const green = [-87.72, greenLat];
   const hole = {
