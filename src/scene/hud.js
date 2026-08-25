@@ -32,7 +32,10 @@ export function createHud() {
     }
 
     const bits = [meta.location, `${hole.yardage} yd`, meta.attribution].filter(Boolean);
-    els.note.innerHTML = bits.map((b2, i) => (i === 2 ? `<b>${b2}</b>` : b2)).join('<br>');
+    els.note.innerHTML = bits.map((b2, i) => (i === bits.length - 1 ? `<b>${b2}</b>` : b2)).join('<br>');
+    if (hole.syntheticFairway) {
+      els.note.innerHTML += '<br><span style="opacity:0.7">fairway corridor approximated — no OSM fairway</span>';
+    }
     if (meta.source === 'placeholder' && meta.reason) {
       els.note.innerHTML += `<br><span style="color:#e07a6b">${meta.reason}</span>`;
     }

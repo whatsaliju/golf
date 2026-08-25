@@ -2,9 +2,38 @@
 // from the real play-line length; elevation change from an optional elevation
 // sampler (MapLibre's queryTerrainElevation at runtime, or a DEM in the baker).
 
-import { haversineMeters, pathLengthMeters, bboxOf, M_TO_YD, M_TO_FT } from './geo.js';
+import { haversineMeters, pathLengthMeters, bboxOf, densify, M_TO_YD, M_TO_FT } from './geo.js';
 
 const dist = (a, b) => haversineMeters(a, b);
+
+/**
+ * A fairway-corridor polygon buffered ±halfWidth around a play line.
+ *
+ * Many OSM holes have a `golf=hole` play line and tees/green but NO
+ * `golf=fairway` polygon (Whistling Straits hole 1 is one). Without this the
+ * fairway is invisible and there's no shape to judge the flight against, so we
+ * synthesize a ribbon along the (smoothed) play line — an honest approximation
+ * of the corridor the flight follows, not the exact mapped turf.
+ */
+function corridorRing(line, halfWidthM) {
+  if (!line || line.length < 2) return null;
+  const smooth = densify(line, Math.max(24, line.length * 8));
+  const lat0 = smooth[Math.floor(smooth.length / 2)][1];
+  const mLat = 111320, mLon = 111320 * Math.cos((lat0 * Math.PI) / 180);
+  const P = smooth.map(([lo, la]) => [lo * mLon, la * mLat]);
+  const left = [], right = [];
+  for (let i = 0; i < P.length; i++) {
+    const a = P[Math.max(i - 1, 0)], b = P[Math.min(i + 1, P.length - 1)];
+    let dx = b[0] - a[0], dy = b[1] - a[1];
+    const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+    const nx = -dy, ny = dx; // left normal
+    left.push([P[i][0] + nx * halfWidthM, P[i][1] + ny * halfWidthM]);
+    right.push([P[i][0] - nx * halfWidthM, P[i][1] - ny * halfWidthM]);
+  }
+  const ring = [...left, ...right.reverse()];
+  ring.push(ring[0]);
+  return ring.map(([x, y]) => [x / mLon, y / mLat]);
+}
 
 function nearest(point, features) {
   let best = null, bestD = Infinity;
@@ -175,6 +204,16 @@ export function assembleHole(parsed, ref, sampleElevation) {
   // Camera route that hugs the fairway through bends (falls back to play line).
   const route = fairwaySpine(centerline, fairways.map((f) => f.ring)) || centerline;
 
+  // Fairway polygons to draw: the real OSM ones when present, otherwise a
+  // synthesized corridor so the fairway is visible and the flight has a shape
+  // to follow.
+  let fairwayRings = fairways.map((f) => f.ring);
+  let syntheticFairway = false;
+  if (fairwayRings.length === 0) {
+    const ring = corridorRing(route, 18); // ~36 m wide playing corridor
+    if (ring) { fairwayRings = [ring]; syntheticFairway = true; }
+  }
+
   const yardage = Math.round((osmDistM ? osmDistM : pathLengthMeters(centerline)) * M_TO_YD);
 
   let elevationChangeFt = null;
@@ -193,7 +232,7 @@ export function assembleHole(parsed, ref, sampleElevation) {
     ref: refStr, par, name: holeLine?.name,
     centerline, route, tee: teePt, greenCenter,
     greenRing: greenFeat?.ring || [],
-    fairwayRings: fairways.map((f) => f.ring),
+    fairwayRings, syntheticFairway,
     bunkerRings: bunkers.map((b) => b.ring),
     waterRings: water.map((w) => w.ring),
     teeRings: tees.map((t) => t.ring),
