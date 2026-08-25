@@ -65,6 +65,16 @@ const map = new maplibregl.Map({
 });
 map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
 
+// Keep the canvas matched to the window. MapLibre can lock in a too-small size
+// if the container hadn't reached full size when the map initialised (the map
+// then fills only part of the screen), and mobile rotation / tab-switching can
+// leave it stale. Re-measure on every viewport change and just after load.
+const resizeMap = () => { try { map.resize(); } catch { /* map not ready yet */ } };
+window.addEventListener('resize', resizeMap);
+window.addEventListener('orientationchange', () => setTimeout(resizeMap, 250));
+document.addEventListener('visibilitychange', () => { if (!document.hidden) resizeMap(); });
+map.once('load', () => setTimeout(resizeMap, 0));
+
 const hud = createHud();
 const flyover = createFlyover(map, hud);
 
@@ -231,6 +241,7 @@ async function present(i) {
       showStatus('Live fetch failed — placeholder hole on real terrain', data.meta.reason || '');
       setTimeout(hideStatus, 2800);
     } else hideStatus();
+    resizeMap(); // ensure the flight reads a full-screen canvas height, not a stale one
     try { fillElevation(data); } catch (e) { console.warn('elevation:', e); }
     try { flyover.load(data.hole); } catch (e) { console.warn('flyover:', e); }
   };
