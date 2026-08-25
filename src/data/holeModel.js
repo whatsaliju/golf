@@ -15,6 +15,58 @@ function nearest(point, features) {
   return best;
 }
 
+/**
+ * A fairway-following route between tee and green.
+ *
+ * The OSM `golf=hole` play line is often drawn straighter than the fairway, so
+ * a camera that flies it cuts the corner of a bend. This bends the route toward
+ * the fairway's midline: project every fairway-polygon vertex onto the
+ * tee→green axis, bin by progress along it, and take the mean perpendicular
+ * offset per bin. Both fairway edges shift together through a curve, so their
+ * mean tracks the centre of the fairway and the route hugs the turf.
+ *
+ * Returns null (keep the straight play line) when there isn't enough fairway
+ * geometry to trust — a green-only or unmapped hole.
+ */
+export function fairwaySpine(tee, green, fairwayRings) {
+  if (!fairwayRings || !fairwayRings.length) return null;
+  const lat0 = (tee[1] + green[1]) / 2;
+  const mLat = 111320, mLon = 111320 * Math.cos((lat0 * Math.PI) / 180);
+  const toXY = ([lon, lat]) => [lon * mLon, lat * mLat];
+  const T = toXY(tee), G = toXY(green);
+  const ax = G[0] - T[0], ay = G[1] - T[1];
+  const L = Math.hypot(ax, ay) || 1;
+  const ux = ax / L, uy = ay / L;   // along tee→green
+  const px = -uy, py = ux;          // perpendicular (left positive)
+
+  const BINS = 12;
+  const bin = Array.from({ length: BINS }, () => ({ sumD: 0, n: 0 }));
+  let used = 0;
+  for (const ring of fairwayRings) {
+    for (const c of ring) {
+      const [x, y] = toXY(c);
+      const dx = x - T[0], dy = y - T[1];
+      const s = dx * ux + dy * uy;      // metres along the axis
+      if (s < -25 || s > L + 25) continue;
+      const d = dx * px + dy * py;      // metres off the axis
+      let k = Math.floor((s / L) * BINS);
+      k = Math.max(0, Math.min(BINS - 1, k));
+      bin[k].sumD += d; bin[k].n++; used++;
+    }
+  }
+  if (used < 6) return null;
+
+  const spine = [tee];
+  for (let k = 0; k < BINS; k++) {
+    if (!bin[k].n) continue;
+    const s = ((k + 0.5) / BINS) * L;
+    const d = bin[k].sumD / bin[k].n;   // fairway midline offset in this slice
+    spine.push([(T[0] + ux * s + px * d) / mLon, (T[1] + uy * s + py * d) / mLat]);
+  }
+  spine.push(green);
+  return spine.length >= 3 ? spine : null;
+}
+
 /** Shortest distance (m) from a lng/lat point to a lng/lat polyline. */
 function distToPolyline(pt, line) {
   // planar approximation in local degrees scaled to metres — fine at hole scale
@@ -73,6 +125,9 @@ export function assembleHole(parsed, ref, sampleElevation) {
   const fairways = parsed.fairways.filter(near);
   const tees = teeByRef.length ? teeByRef : parsed.tees.filter(near);
 
+  // Camera route that hugs the fairway through bends (falls back to play line).
+  const route = fairwaySpine(teePt, greenCenter, fairways.map((f) => f.ring)) || centerline;
+
   const yardage = Math.round((osmDistM ? osmDistM : pathLengthMeters(centerline)) * M_TO_YD);
 
   let elevationChangeFt = null;
@@ -89,7 +144,7 @@ export function assembleHole(parsed, ref, sampleElevation) {
 
   return {
     ref: refStr, par, name: holeLine?.name,
-    centerline, tee: teePt, greenCenter,
+    centerline, route, tee: teePt, greenCenter,
     greenRing: greenFeat?.ring || [],
     fairwayRings: fairways.map((f) => f.ring),
     bunkerRings: bunkers.map((b) => b.ring),
