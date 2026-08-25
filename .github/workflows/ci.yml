@@ -24,6 +24,25 @@ jobs:
           count=$(ls public/holes/*.json 2>/dev/null | wc -l)
           echo "Baked $count hole JSON file(s)"
           test "$count" -ge 1
+      - name: DIAGNOSE ws-1 geometry (temporary)
+        run: |
+          node --input-type=module -e "
+          import { readFileSync } from 'node:fs';
+          const d = JSON.parse(readFileSync('./public/holes/ws-1.json','utf8'));
+          const h = d.hole;
+          console.log(JSON.stringify({
+            fairwayCount: h.fairwayRings.length,
+            fairwayVertexCounts: h.fairwayRings.map(r=>r.length),
+            teeCount: h.teeRings.length,
+            greenVertexCount: h.greenRing.length,
+            tee: h.tee, greenCenter: h.greenCenter,
+            centerlineLen: h.centerline.length,
+            centerline: h.centerline,
+            routeLen: h.route.length,
+            yardage: h.yardage,
+            bbox: h.bbox,
+          }, null, 2));
+          "
       - run: npm run build
         env:
           VITE_BASE: ./
