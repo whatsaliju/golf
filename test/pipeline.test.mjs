@@ -7,7 +7,7 @@ import {
 import {
   haversineMeters, pathLengthMeters, centroid, pointInRing, bearing, catmullRom, bboxOf,
 } from '../src/data/geo.js';
-import { parseOverpass, filterToCourse, parseContext } from '../src/data/overpass.js';
+import { parseOverpass, filterToCourse, filterToCourseByRouting, parseContext } from '../src/data/overpass.js';
 import { assembleHole, fairwaySpine } from '../src/data/holeModel.js';
 import { holeToGeoJSON, contextToGeoJSON } from '../src/data/holeGeoJSON.js';
 import { buildFrames } from '../src/scene/flyover.js';
@@ -95,6 +95,27 @@ test('assembleHole computes real yardage, orientation and elevation', () => {
   assert.ok(hole.greenCenter[1] > 43.852);
   assert.ok(Math.abs(hole.elevationChangeFt - 12) <= 1, `elev ${hole.elevationChangeFt}`);
   assert.equal(hole.bunkerRings.length, 1);
+});
+
+test('filterToCourseByRouting traces one course through overlapping holes', () => {
+  // Two 3-hole courses sharing refs 1–3: course A runs north near lng 0,
+  // course B is a separate chain ~1 km east. Anchored at A's #2, routing must
+  // return A's three holes and none of B's.
+  const line = (lng, lat0) => [[lng, lat0], [lng, lat0 + 0.0009]];
+  const mk = (id, ref, lng, lat0) => {
+    const l = line(lng, lat0);
+    return { id, ref, line: l, center: [lng, lat0 + 0.00045] };
+  };
+  const parsed = {
+    holes: [
+      mk('A1', '1', 0, 0), mk('A2', '2', 0, 0.001), mk('A3', '3', 0, 0.002),
+      mk('B1', '1', 0.01, 0), mk('B2', '2', 0.01, 0.001), mk('B3', '3', 0.01, 0.002),
+    ],
+  };
+  const out = filterToCourseByRouting(parsed, { ref: '2', point: [0, 0.00145] });
+  assert.equal(out.holes.length, 3, 'traces exactly the anchor course');
+  assert.deepEqual(out.holes.map((h) => h.id).sort(), ['A1', 'A2', 'A3']);
+  assert.ok(out.holes.every((h) => Math.abs(h.center[0]) < 1e-6), 'no holes from the other course');
 });
 
 test('assembleHole synthesizes a fairway corridor when OSM has none', () => {

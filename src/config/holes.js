@@ -21,6 +21,18 @@ export const COURSES = {
     // 'mapbox' = Mapbox Satellite (needs VITE_MAPBOX_TOKEN)
     imagerySource: 'esri',
   },
+  'blackwolf-run-meadow-valleys': {
+    displayName: 'Blackwolf Run — Meadow Valleys',
+    location: 'Kohler, Wisconsin, USA',
+    region: 'US',
+    // Blackwolf Run's Meadow Valleys, River, and par-3 Baths courses all sit
+    // under a single OSM "Blackwolf Run" relation with holes numbered 1–18 and
+    // no per-course boundary. Instead of a name filter, isolate Meadow Valleys
+    // by walking its routing from a known anchor hole (#13 "Chimney").
+    courseAnchor: { ref: '13', point: [-87.77337, 43.71942] },
+    bbox: { west: -87.805, south: 43.708, east: -87.760, north: 43.742 },
+    imagerySource: 'esri',
+  },
 };
 
 /**
@@ -38,13 +50,26 @@ const STRAITS_NAMES = [
   'Dyeabolical',
 ];
 
-export const HOLES = STRAITS_NAMES.map((name, i) => ({
+const straitsHoles = STRAITS_NAMES.map((name, i) => ({
   id: `ws-${i + 1}`,
   courseId: 'whistling-straits',
   ref: String(i + 1), // OSM golf=hole ref
   title: 'Whistling Straits — The Straits',
   subtitle: `Hole ${i + 1} · ${name}`,
 }));
+
+// Blackwolf Run — Meadow Valleys, all 18. Isolated from the other Blackwolf
+// courses by routing (see COURSES.courseAnchor), so hole names aren't relied on
+// for selection; subtitles stay generic.
+const meadowValleysHoles = Array.from({ length: 18 }, (_, i) => ({
+  id: `bwmv-${i + 1}`,
+  courseId: 'blackwolf-run-meadow-valleys',
+  ref: String(i + 1),
+  title: 'Blackwolf Run — Meadow Valleys',
+  subtitle: `Hole ${i + 1}`,
+}));
+
+export const HOLES = [...straitsHoles, ...meadowValleysHoles];
 
 export function resolveHole(holeCfg) {
   const course = COURSES[holeCfg.courseId];

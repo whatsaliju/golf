@@ -276,6 +276,18 @@ const holeBtn = document.getElementById('holeBtn');
 if (HOLES.length < 2) holeBtn.style.display = 'none';
 holeBtn.onclick = () => present(holeIdx + 1);
 
+// Course selector: jump to the first hole of the next course in HOLES[].
+const courseBtn = document.getElementById('courseBtn');
+if (courseBtn) {
+  const courseIds = [...new Set(HOLES.map((h) => h.courseId))];
+  if (courseIds.length < 2) courseBtn.style.display = 'none';
+  else courseBtn.onclick = () => {
+    const cur = HOLES[holeIdx].courseId;
+    const next = courseIds[(courseIds.indexOf(cur) + 1) % courseIds.length];
+    present(HOLES.findIndex((h) => h.courseId === next));
+  };
+}
+
 // ---- one-click flyover recording (canvas → .webm) --------------------------
 let recorder = null;
 const recBtn = document.getElementById('recBtn');
