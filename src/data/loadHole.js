@@ -3,7 +3,7 @@
 // Elevation change is filled in by the map after terrain loads (live/placeholder)
 // or read from the baked file.
 
-import { fetchOverpass, parseOverpass, filterToCourse, fetchContext, parseContext } from './overpass.js';
+import { fetchOverpass, parseOverpass, filterCourse, fetchContext, parseContext } from './overpass.js';
 import { assembleHole } from './holeModel.js';
 import { holeToGeoJSON, contextToGeoJSON } from './holeGeoJSON.js';
 import { pathLengthMeters, M_TO_YD } from './geo.js';
@@ -29,7 +29,7 @@ async function loadLive(resolved, onProgress) {
   const signal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout
     ? AbortSignal.timeout(25000) : undefined;
   const json = await fetchOverpass(course.bbox, { signal });
-  const parsed = filterToCourse(parseOverpass(json), course.courseNameFilter);
+  const parsed = filterCourse(parseOverpass(json), course);
   if (!parsed.holes.length && !parsed.tees.length) throw new Error('No golf features for this bbox/course');
 
   const hole = assembleHole(parsed, ref, null); // elevation filled after terrain loads

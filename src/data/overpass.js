@@ -2,7 +2,7 @@
 // features by their `golf=*` tag and keeps geometry in lng/lat for MapLibre.
 
 import { overpassEndpoints } from './endpoints.js';
-import { ringCenter, pointInRing } from './geo.js';
+import { ringCenter, pointInRing, haversineMeters } from './geo.js';
 
 /**
  * POST an Overpass query, trying each mirror in turn. Each attempt gets its own
@@ -150,6 +150,73 @@ export function filterToCourse(parsed, courseName) {
     holes: keep(parsed.holes), fairways: keep(parsed.fairways), greens: keep(parsed.greens),
     tees: keep(parsed.tees), bunkers: keep(parsed.bunkers), water: keep(parsed.water),
   };
+}
+
+/**
+ * Isolate ONE course by walking its routing, for sites where several courses
+ * share a bbox and OSM has no per-course boundary (Blackwolf Run: Meadow
+ * Valleys + River + the par-3 Baths all under one "Blackwolf Run" relation,
+ * every hole numbered 1–18). Given an anchor {ref, point} that pins one known
+ * hole of the target course, start there and greedily follow the routing —
+ * each hole's green end sits by the next hole's tee end — to trace that
+ * course's own 1→18 chain, stepping over the other courses' holes.
+ *
+ * `anchor.point` is [lng,lat] near the anchor hole; `anchor.ref` is its number.
+ */
+export function filterToCourseByRouting(parsed, anchor) {
+  if (!anchor || !parsed.holes.length) return parsed;
+  const byRef = new Map();
+  for (const h of parsed.holes) {
+    const r = String(h.ref);
+    if (!byRef.has(r)) byRef.set(r, []);
+    byRef.get(r).push(h);
+  }
+  const anchorCands = byRef.get(String(anchor.ref));
+  if (!anchorCands || !anchorCands.length) return parsed;
+
+  const ends = (h) => [h.line[0], h.line[h.line.length - 1]];
+  // shortest distance between any endpoint pair of two holes (green↔tee join)
+  const gap = (a, b) => {
+    const [a0, a1] = ends(a), [b0, b1] = ends(b);
+    return Math.min(
+      haversineMeters(a0, b0), haversineMeters(a0, b1),
+      haversineMeters(a1, b0), haversineMeters(a1, b1),
+    );
+  };
+  // anchor hole = the ref candidate nearest the anchor point
+  let start = anchorCands[0], best = Infinity;
+  for (const h of anchorCands) {
+    const d = haversineMeters(h.center, anchor.point);
+    if (d < best) { best = d; start = h; }
+  }
+
+  const refs = [...byRef.keys()].map(Number).filter(Number.isFinite);
+  const minR = Math.min(...refs), maxR = Math.max(...refs);
+  const anchorN = Number(anchor.ref);
+  const chain = new Map([[String(anchorN), start]]);
+
+  const walk = (from, to, step) => {
+    let prev = start;
+    for (let r = from; step > 0 ? r <= to : r >= to; r += step) {
+      const cands = byRef.get(String(r));
+      if (!cands || !cands.length) continue;
+      let pick = cands[0], bg = Infinity;
+      for (const c of cands) { const g = gap(prev, c); if (g < bg) { bg = g; pick = c; } }
+      chain.set(String(r), pick); prev = pick;
+    }
+  };
+  walk(anchorN + 1, maxR, 1);  // forward to 18
+  walk(anchorN - 1, minR, -1); // back to 1
+
+  return { ...parsed, holes: [...chain.values()] };
+}
+
+/** Isolate a course's features from a bbox fetch: by routing when the course
+ *  defines an anchor (overlapping courses), else by named boundary polygon. */
+export function filterCourse(parsed, course) {
+  return course.courseAnchor
+    ? filterToCourseByRouting(parsed, course.courseAnchor)
+    : filterToCourse(parsed, course.courseNameFilter);
 }
 
 export { pointInRing };

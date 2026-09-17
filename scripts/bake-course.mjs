@@ -12,7 +12,7 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { COURSES, HOLES } from '../src/config/holes.js';
-import { fetchOverpass, parseOverpass, filterToCourse, fetchContext, parseContext } from '../src/data/overpass.js';
+import { fetchOverpass, parseOverpass, filterCourse, fetchContext, parseContext } from '../src/data/overpass.js';
 import { assembleHole } from '../src/data/holeModel.js';
 import { imagerySource } from '../src/data/endpoints.js';
 
@@ -46,7 +46,7 @@ async function main() {
 
     let parsed;
     try {
-      parsed = filterToCourse(parseOverpass(await fetchOverpass(course.bbox)), course.courseNameFilter);
+      parsed = filterCourse(parseOverpass(await fetchOverpass(course.bbox)), course);
     } catch (e) {
       console.error(`  ! hole query failed (${e.message}) — skipping course, runtime will fetch live`);
       skipped += holes.length;
